@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
   }
 
   autogen::Generated<simple_a> gen("simple_a");
-  // gen.set_mode(autogen::GENERATE_CUDA);
+  gen.set_mode(autogen::GENERATE_CUDA);
   // gen.set_mode(autogen::GENERATE_NONE);
   std::vector<double> jacobian;
   for (int i = 0; i < 5; ++i) {
@@ -56,6 +56,11 @@ int main(int argc, char *argv[]) {
     gen.jacobian(input, jacobian);
     print(jacobian);
   }
+
+  std::vector<std::vector<double>> outputs(1);
+  outputs[0].resize(dim);
+  gen({input}, outputs);
+  print(outputs[0]);
 
   return EXIT_SUCCESS;
 }

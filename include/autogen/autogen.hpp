@@ -202,22 +202,20 @@ struct Generated {
   void operator()(
       const std::vector<std::vector<BaseScalar>> &local_inputs,
       std::vector<std::vector<BaseScalar>> &outputs,
-      const std::vector<std::vector<BaseScalar>> &global_input = {}) {
+      const std::vector<BaseScalar> &global_input = {}) {
     if (local_inputs.empty()) {
       return;
     }
     outputs.resize(local_inputs.size());
 
     std::vector<BaseScalar> compilation_input;
-    compilation_input.insert(compilation_input.back(), global_input.begin(),
-                             global_input.end());
-    compilation_input.insert(compilation_input.back(), local_inputs[0].begin(),
-                             local_inputs[0].end());
+    compilation_input.insert(compilation_input.end(), global_input.begin(), global_input.end());
+    compilation_input.insert(compilation_input.end(), local_inputs[0].begin(), local_inputs[0].end());
     conditionally_compile(compilation_input, outputs[0]);
 
     if (mode_ == GENERATE_NONE) {
       // we may not assume the original function is thread-safe
-      std::vector<BaseScalar> input(global_input[0].size());
+      std::vector<BaseScalar> input(global_input.size());
       input.insert(input.begin(), global_input.begin(), global_input.end());
       for (size_t i = 0; i < local_inputs.size(); ++i) {
         for (size_t j = 0; j < local_inputs[i].size(); ++i) {
@@ -236,7 +234,7 @@ struct Generated {
       for (int i = 0; i < num_tasks; ++i) {
         static thread_local std::vector<BaseScalar> input;
         if (input.empty()) {
-          input.resize(global_input[0].size());
+          input.resize(global_input.size());
           input.insert(input.begin(), global_input.begin(), global_input.end());
         }
         for (size_t j = 0; j < local_inputs[i].size(); ++i) {
@@ -420,11 +418,10 @@ struct Generated {
     using namespace CppAD;
     using namespace CppAD::cg;
 
-    CudaModelSourceGen<BaseScalar> main_source_gen(*(main_trace.tape),
-                                                        name);
+    CudaModelSourceGen<BaseScalar> main_source_gen(*(main_trace.tape), name);
     main_source_gen.setCreateJacobian(true);
     CudaLibraryProcessor<BaseScalar> cuda_proc(&main_source_gen,
-                                                    name + "_cuda");
+                                               name + "_cuda");
     // reverse order of invocation to first generate code for innermost
     // functions
     const auto &order = CodeGenData<BaseScalar>::invocation_order;
@@ -432,8 +429,7 @@ struct Generated {
     for (auto it = order.rbegin(); it != order.rend(); ++it) {
       std::cout << "Adding cuda model " << *it << "\n";
       FunctionTrace<BaseScalar> &trace = CodeGenData<BaseScalar>::traces[*it];
-      auto *source_gen =
-          new CudaModelSourceGen<BaseScalar>(*(trace.tape), *it);
+      auto *source_gen = new CudaModelSourceGen<BaseScalar>(*(trace.tape), *it);
       // source_gen->setCreateSparseJacobian(true);
       // source_gen->setCreateJacobian(true);
       source_gen->setCreateForwardOne(true);
@@ -515,4 +511,4 @@ void call_atomic(const std::string &name,
   // no tracing occurs since the arguments are of type double
   functor(input, output);
 }
-}
+}  // namespace autogen

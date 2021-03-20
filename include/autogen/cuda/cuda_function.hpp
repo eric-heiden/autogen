@@ -219,6 +219,7 @@ struct CudaFunction {
     }
 
     int num_total_threads = static_cast<int>(local_inputs.size());
+    num_threads_per_block = std::min(num_threads_per_block, num_total_threads);
     Scalar *output = new Scalar[num_total_threads * meta_data_.output_dim];
 
     int num_blocks = num_total_threads / num_threads_per_block;
