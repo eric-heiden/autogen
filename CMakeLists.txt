@@ -6,10 +6,16 @@ cmake_policy(SET CMP0057 NEW)
 cmake_policy(SET CMP0077 NEW)
 cmake_policy(SET CMP0079 NEW)
 
+set(CMAKE_CXX_STANDARD 17)
+
+find_package(Eigen3 REQUIRED)
+
+include(ExternalProject)
+
 # Add CppAD as an external project and an imported target.  
 ExternalProject_Add(CppAD-Project
 PREFIX CppAD
-SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/third_party/CppAD
+SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/CppAD
 CMAKE_ARGS
   -Dcppad_prefix=${CMAKE_CURRENT_BINARY_DIR}/CppAD
 )
@@ -22,7 +28,7 @@ target_compile_definitions(CppAD INTERFACE -DUSE_CPPAD)
 # Same for CppADCodeGen
 ExternalProject_Add(CppADCodeGen-Project
 PREFIX CppADCodeGen
-SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/third_party/CppADCodeGen
+SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/CppADCodeGen
 CMAKE_ARGS
   -DCPPAD_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/CppAD/include
   -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/CppADCodeGen
@@ -39,7 +45,8 @@ INTERFACE
   ${CMAKE_CURRENT_BINARY_DIR}/CppADCodeGen/include
 )
 
-add_library(autogen INTERFACE include/autogen/autogen.hpp)
-target_include_directories(autogen PUBLIC include)
+add_library(autogen INTERFACE)
+target_include_directories(autogen INTERFACE include)
+target_link_libraries(autogen INTERFACE CppADCodeGen Eigen3::Eigen)
 
 add_subdirectory(examples)

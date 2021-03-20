@@ -1,10 +1,12 @@
 #pragma once
 
+#include <filesystem>
+
 #if CPPAD_CG_SYSTEM_WIN
 #include <windows.h>
 #endif
 
-#include "../stopwatch.hpp"
+#include "autogen/utils/stopwatch.hpp"
 #include "cuda_codegen.hpp"
 
 namespace autogen {

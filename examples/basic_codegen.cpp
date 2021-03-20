@@ -8,7 +8,7 @@ void simple_c(const std::vector<Scalar> &input, std::vector<Scalar> &output) {
 template <typename Scalar>
 void simple_b(const std::vector<Scalar> &input, std::vector<Scalar> &output) {
   // std::vector<Scalar> temp(1);
-  // tds::call_atomic("cosine", &simple_c<Scalar>, input, temp);
+  // autogen::call_atomic("cosine", &simple_c<Scalar>, input, temp);
   output[0] = sin(input[0] * 2.0 + 0.7) * 5.0;  // + temp[0];
 }
 
@@ -19,7 +19,7 @@ struct simple_a {
     for (size_t i = 0; i < output.size(); ++i) {
       output[i] = input[i] * input[i] * 3.0;
       std::vector<Scalar> temp(1);
-      tds::call_atomic("sine", &simple_b<Scalar>, {input[i]}, temp);
+      autogen::call_atomic("sine", &simple_b<Scalar>, {input[i]}, temp);
       output[i] += temp[0];
     }
   }
@@ -45,9 +45,9 @@ int main(int argc, char *argv[]) {
     input[i] = double(rand()) / RAND_MAX;
   }
 
-  tds::Generated<simple_a> gen("simple_a");
-//   gen.set_mode(tds::GENERATE_CUDA);
-  // gen.set_mode(tds::GENERATE_NONE);
+  autogen::Generated<simple_a> gen("simple_a");
+  // gen.set_mode(autogen::GENERATE_CUDA);
+  // gen.set_mode(autogen::GENERATE_NONE);
   std::vector<double> jacobian;
   for (int i = 0; i < 5; ++i) {
     gen(input, output);

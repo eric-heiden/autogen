@@ -1,5 +1,7 @@
 #pragma once
 
+#include "autogen/utils/file_utils.hpp"
+
 #if CPPAD_CG_SYSTEM_WIN
 #include <windows.h>
 #endif
