@@ -2,15 +2,18 @@
 
 template <typename Scalar>
 Scalar simple_c(const std::vector<Scalar> &input) {
-  return cos(input[0] * 5.0);
+  return cos(input[0] * input[1] * 5.0);
 }
 
 template <typename Scalar>
 void simple_b(const std::vector<Scalar> &input, std::vector<Scalar> &output) {
-  output[0] = sin(input[0] * 2.0 + 0.7) * 5.0;
+  output[0] = sin(input[0] * 2.0 + 0.7) * 5.0 * input[1] * input[2];
+  output[1] = input[1] * input[2];
+  output[2] = input[1] * input[2] * input[2] * input[2];
   // note we use a special `call_atomic` overload for scalar-valued functions
-  // for (auto &o : output)
-  //   o += autogen::call_atomic("cosine", &simple_c<Scalar>, input);
+  std::function<Scalar(const std::vector<Scalar> &)> functor =
+      &simple_c<Scalar>;
+  for (auto &o : output) o += autogen::call_atomic("cosine", functor, input);
 }
 
 template <typename Scalar>
@@ -19,7 +22,7 @@ struct simple_a {
                   std::vector<Scalar> &output) const {
     for (size_t i = 0; i < output.size(); ++i) {
       output[i] = input[i] * input[i] * 3.0;
-      std::vector<Scalar> inputs = {input[i]};
+      std::vector<Scalar> inputs = {input[0], input[1], input[2]};
       std::vector<Scalar> temp(3);
       std::function<void(const std::vector<Scalar> &, std::vector<Scalar> &)>
           functor = &simple_b<Scalar>;
@@ -50,21 +53,48 @@ int main(int argc, char *argv[]) {
   }
 
   autogen::Generated<simple_a> gen("simple_a");
-   gen.set_mode(autogen::GENERATE_CUDA);
+  gen.set_mode(autogen::GENERATE_CUDA);
   // gen.set_mode(autogen::GENERATE_NONE);
   std::vector<double> jacobian;
-  for (int i = 0; i < 5; ++i) {
-    gen(input, output);
-    print(output);
+  std::vector<std::vector<double>> outputs(1);
 
-    gen.jacobian(input, jacobian);
-    print(jacobian);
+  try {
+    std::cout << "### Mode: " << gen.mode() << std::endl;
+    for (int i = 0; i < 2; ++i) {
+      gen(input, output);
+      print(output);
+
+      gen.jacobian(input, jacobian);
+      print(jacobian);
+    }
+
+    outputs[0].resize(dim);
+    gen({input}, outputs);
+    print(outputs[0]);
+  } catch (const std::exception &e) {
+    std::cerr << e.what() << std::endl;
   }
 
-  std::vector<std::vector<double>> outputs(1);
-  outputs[0].resize(dim);
-  gen({input}, outputs);
-  print(outputs[0]);
+  gen.set_mode(autogen::GENERATE_NONE);
+  std::cout << "### Mode: " << gen.mode() << std::endl;
+  gen(input, output);
+  print(output);
+  gen.jacobian(input, jacobian);
+  print(jacobian);
+
+  gen.set_mode(autogen::GENERATE_CPPAD);
+  std::cout << "### Mode: " << gen.mode() << std::endl;
+  gen(input, output);
+  print(output);
+  gen.jacobian(input, jacobian);
+  print(jacobian);
+
+  gen.set_mode(autogen::GENERATE_CPU);
+  std::cout << "### Mode: " << gen.mode() << std::endl;
+  gen(input, output);
+  print(output);
+  gen.jacobian(input, jacobian);
+  print(jacobian);
 
   return EXIT_SUCCESS;
 }

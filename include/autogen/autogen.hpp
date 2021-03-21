@@ -55,7 +55,7 @@ struct FunctionTrace {
     //  // exception
 #ifdef NDEBUG
     // we don't trigger the CPPAD_ASSERT here
-    //delete bridge;
+    // delete bridge;
 #endif
   }
 };
@@ -99,6 +99,25 @@ enum GenerationMode {
   GENERATE_CUDA
 };
 
+static inline std::string str(const GenerationMode &mode) {
+  switch (mode) {
+    case GENERATE_NONE:
+      return "None";
+    case GENERATE_CPPAD:
+      return "CppAD";
+    case GENERATE_CPU:
+      return "CPU";
+    case GENERATE_CUDA:
+      return "CUDA";
+  }
+}
+
+static inline std::ostream &operator<<(std::ostream &os,
+                                       const GenerationMode &mode) {
+  os << str(mode);
+  return os;
+}
+
 template <template <typename> typename Functor, typename BaseScalar = double>
 struct Generated {
   static inline std::map<std::string, FunctionTrace<BaseScalar>> traces;
@@ -117,6 +136,11 @@ struct Generated {
 
   int num_gpu_threads_per_block{32};
 
+  /**
+   * Step size to use for finite differencing.
+   */
+  double finite_diff_eps{1e-6};
+
  protected:
   std::unique_ptr<Functor<BaseScalar>> f_double_;
   std::unique_ptr<Functor<CppADScalar>> f_cppad_;
@@ -129,6 +153,15 @@ struct Generated {
 
   // name of the compiled library
   std::string library_name_;
+
+  size_t local_input_dim_{0};
+  size_t global_input_dim_{0};
+  size_t output_dim_{0};
+
+  // used by CppAD (only in GENERATE_CPPAD mode)
+  std::shared_ptr<CppAD::ADFun<BaseScalar>> tape_{nullptr};
+  std::vector<CppADScalar> ax_;
+  std::vector<CppADScalar> ay_;
 
  public:
   template <typename... Args>
@@ -143,18 +176,25 @@ struct Generated {
   GenerationMode mode() const { return mode_; }
   void set_mode(GenerationMode mode) {
     if (mode != this->mode_) {
+      // changing the mode discards the previously compiled library
       std::lock_guard<std::mutex> guard(compilation_mutex_);
       library_name_ = "";
     }
     this->mode_ = mode;
   }
 
+  size_t input_dim() const { return local_input_dim_ + global_input_dim_; }
+  size_t local_input_dim() const { return local_input_dim_; }
+  size_t global_input_dim() const { return global_input_dim_; }
+  size_t output_dim() const { return output_dim_; }
+
   bool is_compiled() const {
     std::lock_guard<std::mutex> guard(compilation_mutex_);
     switch (mode_) {
       case GENERATE_NONE:
-      case GENERATE_CPPAD:
         return true;
+      case GENERATE_CPPAD:
+        return bool(tape_) && !ax_.empty() && !ay_.empty();
       case GENERATE_CPU:
       case GENERATE_CUDA:
         return !library_name_.empty();
@@ -203,6 +243,8 @@ struct Generated {
     } else if (mode_ == GENERATE_CUDA) {
       const auto &model = get_cuda_model();
       model.forward_zero(input, output);
+    } else if (mode_ == GENERATE_CPPAD) {
+      output = tape_->Forward(0, input);
     }
   }
 
@@ -260,6 +302,9 @@ struct Generated {
       const auto &model = get_cuda_model();
       model.forward_zero(&outputs, local_inputs, num_gpu_threads_per_block,
                          global_input);
+    } else if (mode_ == GENERATE_CPPAD) {
+      throw std::runtime_error(
+          "CppAD vectorized forward call is not yet implemented.");
     }
   }
 
@@ -279,13 +324,53 @@ struct Generated {
     } else if (mode_ == GENERATE_CUDA) {
       const auto &model = get_cuda_model();
       model.jacobian(input, output);
+    } else if (mode_ == GENERATE_NONE) {
+      // central difference
+      assert(input.size() == input_dim());
+      assert(output_dim() > 0);
+      output.resize(input_dim() * output_dim());
+      std::vector<BaseScalar> left_x = input, right_x = input;
+      std::vector<BaseScalar> left_y(output_dim()), right_y(output_dim());
+      for (size_t i = 0; i < input.size(); ++i) {
+        left_x[i] -= finite_diff_eps;
+        right_x[i] += finite_diff_eps;
+        BaseScalar dx = right_x[i] - left_x[i];
+        (*f_double_)(left_x, left_y);
+        (*f_double_)(right_x, right_y);
+        for (size_t j = 0; j < output_dim(); ++j) {
+          output[j * input_dim() + i] = (right_y[j] - left_y[j]) / dx;
+        }
+        left_x[i] = right_x[i] = input[i];
+      }
+    } else if (mode_ == GENERATE_CPPAD) {
+      output = tape_->Jacobian(input);
     }
   }
 
  protected:
   void conditionally_compile(const std::vector<BaseScalar> &input,
                              std::vector<BaseScalar> &output) {
-    if (!is_compiled()) {
+    if (is_compiled()) {
+      return;
+    }
+    if (mode_ == GENERATE_CPPAD) {
+      tape_ = std::make_shared<CppAD::ADFun<BaseScalar>>();
+      ax_.resize(input.size());
+      ay_.resize(output.size());
+      for (size_t i = 0; i < input.size(); ++i) {
+        ax_[i] = CppADScalar(input[i]);
+      }
+      CppAD::Independent(ax_);
+      (*f_cppad_)(ax_, ay_);
+      tape_->Dependent(ax_, ay_);
+      return;
+    }
+    if (mode_ == GENERATE_CPU || mode_ == GENERATE_CUDA) {
+      assert(!input.empty());
+      assert(!output.empty());
+      local_input_dim_ = input.size();
+      output_dim_ = output.size();
+      // TODO set global_input_dim_
       FunctionTrace<BaseScalar> t = trace(input, output);
       if (compile_in_background) {
         std::thread([this, &t]() { compile(t); });
@@ -353,10 +438,6 @@ struct Generated {
     using namespace CppAD;
     using namespace CppAD::cg;
 
-#if CPPAD_CG_SYSTEM_WIN
-    std::cerr << "CPU code generation is not yet available on Windows.\n";
-    std::exit(1);
-#else
     ModelCSourceGen<BaseScalar> main_source_gen(*(main_trace.tape), name);
     main_source_gen.setCreateJacobian(true);
     ModelLibraryCSourceGen<BaseScalar> libcgen(main_source_gen);
@@ -375,7 +456,15 @@ struct Generated {
       libcgen.addModel(*(models.back()));
     }
     libcgen.setVerbose(true);
-
+#if CPPAD_CG_SYSTEM_WIN
+    SaveFilesModelLibraryProcessor<double> psave(libcgen);
+    psave.saveSourcesTo(name + "_cpu_srcs");
+    std::cerr << "CPU code compilation is not yet available on Windows. Saved "
+                 "source files to \""
+              << name << "_cpu_srcs"
+              << "\".\n ";
+    std::exit(1);
+#else
     DynamicModelLibraryProcessor<BaseScalar> p(libcgen);
     auto compiler = std::make_unique<ClangCompiler<BaseScalar>>();
     compiler->setSourcesFolder(name + "_cpu_srcs");
@@ -517,11 +606,12 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
   (*(trace.bridge))(input, output);
 }
 
+template <typename Scalar>
 inline void call_atomic(
     const std::string &name,
-    std::function<void(const std::vector<double> &, std::vector<double> &)>
+    std::function<void(const std::vector<Scalar> &, std::vector<Scalar> &)>
         functor,
-    const std::vector<double> &input, std::vector<double> &output) {
+    const std::vector<Scalar> &input, std::vector<Scalar> &output) {
   // no tracing occurs since the arguments are of type double
   functor(input, output);
 }
@@ -544,10 +634,11 @@ inline ADCG<BaseScalar> call_atomic(
   return output[0];
 }
 
-inline double call_atomic(
+template <typename Scalar>
+inline Scalar call_atomic(
     const std::string &name,
-    const std::function<double(const std::vector<double> &)> functor,
-    const std::vector<double> &input) {
+    const std::function<Scalar(const std::vector<Scalar> &)> functor,
+    const std::vector<Scalar> &input) {
   return functor(input);
 }
 
