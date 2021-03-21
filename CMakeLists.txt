@@ -8,7 +8,7 @@ cmake_policy(SET CMP0079 NEW)
 
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(Eigen3 REQUIRED)
+find_package(Eigen3)
 
 include(ExternalProject)
 
@@ -32,7 +32,7 @@ SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/CppADCodeGen
 CMAKE_ARGS
   -DCPPAD_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/CppAD/include
   -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/CppADCodeGen
-  -DGOOGLETEST_GIT=ON
+  -DGOOGLETEST_GIT=OFF
 )
 add_dependencies(CppADCodeGen-Project CppAD)
 add_library(CppADCodeGen INTERFACE IMPORTED)
@@ -47,6 +47,10 @@ INTERFACE
 
 add_library(autogen INTERFACE)
 target_include_directories(autogen INTERFACE include)
-target_link_libraries(autogen INTERFACE CppADCodeGen Eigen3::Eigen)
+target_link_libraries(autogen INTERFACE CppADCodeGen)
+if (Eigen_FOUND)
+  target_link_libraries(autogen INTERFACE Eigen3::Eigen3)
+  target_compile_definitions(autogen INTERFACE USE_EIGEN=1)
+endif (Eigen_FOUND)
 
 add_subdirectory(examples)

@@ -1,5 +1,11 @@
 #pragma once
 
+#include <cppad/cg.hpp>
+#include <cppad/cg/arithmetic.hpp>
+#ifdef USE_EIGEN
+#include <cppad/cg/support/cppadcg_eigen.hpp>
+#endif
+
 // clang-format off
 #include "cuda/cuda_codegen.hpp"
 #include "cuda/cuda_library_processor.hpp"
@@ -196,21 +202,22 @@ struct Generated {
   }
 
   /**
-   * Batched execution of the forward pass of this function, which will compute
-   * the outputs for each of the inputs in parallel.
+   * Vectorized execution of the forward pass of this function, which will
+   * compute the outputs for each of the inputs in parallel.
    */
-  void operator()(
-      const std::vector<std::vector<BaseScalar>> &local_inputs,
-      std::vector<std::vector<BaseScalar>> &outputs,
-      const std::vector<BaseScalar> &global_input = {}) {
+  void operator()(const std::vector<std::vector<BaseScalar>> &local_inputs,
+                  std::vector<std::vector<BaseScalar>> &outputs,
+                  const std::vector<BaseScalar> &global_input = {}) {
     if (local_inputs.empty()) {
       return;
     }
     outputs.resize(local_inputs.size());
 
     std::vector<BaseScalar> compilation_input;
-    compilation_input.insert(compilation_input.end(), global_input.begin(), global_input.end());
-    compilation_input.insert(compilation_input.end(), local_inputs[0].begin(), local_inputs[0].end());
+    compilation_input.insert(compilation_input.end(), global_input.begin(),
+                             global_input.end());
+    compilation_input.insert(compilation_input.end(), local_inputs[0].begin(),
+                             local_inputs[0].end());
     conditionally_compile(compilation_input, outputs[0]);
 
     if (mode_ == GENERATE_NONE) {
@@ -458,9 +465,10 @@ struct Generated {
 };
 
 template <typename BaseScalar = double>
-void call_atomic(const std::string &name, const ADFunctor<BaseScalar> &functor,
-                 const std::vector<ADCG<BaseScalar>> &input,
-                 std::vector<ADCG<BaseScalar>> &output) {
+inline void call_atomic(const std::string &name,
+                        const ADFunctor<BaseScalar> &functor,
+                        const std::vector<ADCG<BaseScalar>> &input,
+                        std::vector<ADCG<BaseScalar>> &output) {
   using ADFun = typename FunctionTrace<BaseScalar>::ADFun;
   using CGAtomicFunBridge =
       typename FunctionTrace<BaseScalar>::CGAtomicFunBridge;
@@ -503,12 +511,38 @@ void call_atomic(const std::string &name, const ADFunctor<BaseScalar> &functor,
   (*(trace.bridge))(input, output);
 }
 
-void call_atomic(const std::string &name,
-                 const std::function<void(const std::vector<double> &,
-                                          std::vector<double> &)> &functor,
-                 const std::vector<double> &input,
-                 std::vector<double> &output) {
+inline void call_atomic(
+    const std::string &name,
+    const std::function<void(const std::vector<double> &,
+                             std::vector<double> &)> &functor,
+    const std::vector<double> &input, std::vector<double> &output) {
   // no tracing occurs since the arguments are of type double
   functor(input, output);
 }
+
+/**
+ * More overloads for the atomic function to be traced:
+ */
+
+template <typename BaseScalar>
+inline ADCG<BaseScalar> call_atomic(
+    const std::string &name,
+    const std::function<ADCG<BaseScalar>(const std::vector<ADCG<BaseScalar>> &)>
+        functor,
+    const std::vector<ADCG<BaseScalar>> &input) {
+  ADFunctor<BaseScalar> vec_fun =
+      [functor](const std::vector<ADCG<BaseScalar>> &in,
+                std::vector<ADCG<BaseScalar>> &out) { out[0] = functor(in); };
+  std::vector<ADCG<BaseScalar>> output(1);
+  call_atomic<BaseScalar>(name, vec_fun, input, output);
+  return output[0];
+}
+
+inline double call_atomic(
+    const std::string &name,
+    const std::function<double(const std::vector<double> &)> functor,
+    const std::vector<double> &input) {
+  return functor(input);
+}
+
 }  // namespace autogen

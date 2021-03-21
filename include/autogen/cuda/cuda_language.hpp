@@ -42,9 +42,9 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     int p = atomicFor.getInfo()[2];
     size_t p1 = p + 1;
     const std::vector<Arg> &opArgs = atomicFor.getArguments();
-    CPPADCG_ASSERT_KNOWN(
-        opArgs.size() == p1 * 2,
-        "Invalid number of arguments for atomic forward operation")
+    // CPPADCG_ASSERT_KNOWN(
+    //     opArgs.size() == p1 * 2,
+    //     "Invalid number of arguments for atomic forward operation")
 
     size_t id = atomicFor.getInfo()[0];
     size_t atomicIndex = this->_info->atomicFunctionId2Index.at(id);
@@ -74,25 +74,25 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     //                            *ty[p]); // also does indentation
     this->_ss.str("");
 
-    this->_streamStack << "  " << this->_ATOMIC_TX << " = "
+    this->_streamStack << this->_indentation << this->_ATOMIC_TX << " = "
                        << this->createVariableName(*tx[0]) << ";\n";
-    this->_streamStack << "  " << this->_ATOMIC_TY << " = "
-                       << this->createVariableName(*ty[0]) << ";\n";
+    this->_streamStack << this->_indentation << this->_ATOMIC_TY << " = "
+                       << this->createVariableName(*ty[p]) << ";\n";
 
+    const std::string &fun_name = this->_info->atomicFunctionId2Name.at(id);
     if (q == 0 && p == 0) {
-      const std::string &fun_name = this->_info->atomicFunctionId2Name.at(id);
       this->_streamStack << this->_indentation << fun_name << "_forward_zero("
                          << this->_ATOMIC_TY << ", " << this->_ATOMIC_TX
                          << ");\n";
     } else if (q == 1 && p == 1) {
-      const std::string &fun_name = this->_info->atomicFunctionId2Name.at(id);
       this->_streamStack << this->_indentation << fun_name << "_forward_one("
                          << this->_ATOMIC_TY << ", " << this->_ATOMIC_TX
                          << ");\n";
     } else {
       throw std::runtime_error(
-          "Encountered unhandled atomic forward function call with p = " +
-          std::to_string(p) + " and q = " + std::to_string(q) + ".");
+          "Encountered unhandled atomic forward function call for " + fun_name +
+          " with p = " + std::to_string(p) + " and q = " + std::to_string(q) +
+          ".");
     }
 
     // this->_streamStack << this->_indentation <<
