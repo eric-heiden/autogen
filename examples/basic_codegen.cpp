@@ -19,8 +19,11 @@ struct simple_a {
                   std::vector<Scalar> &output) const {
     for (size_t i = 0; i < output.size(); ++i) {
       output[i] = input[i] * input[i] * 3.0;
+      std::vector<Scalar> inputs = {input[i]};
       std::vector<Scalar> temp(3);
-      autogen::call_atomic("sine", &simple_b<Scalar>, {input[i]}, temp);
+      std::function<void(const std::vector<Scalar> &, std::vector<Scalar> &)>
+          functor = &simple_b<Scalar>;
+      autogen::call_atomic(std::string("sine"), functor, inputs, temp);
       output[i] += temp[0] + temp[1] + temp[2];
     }
   }
@@ -47,7 +50,7 @@ int main(int argc, char *argv[]) {
   }
 
   autogen::Generated<simple_a> gen("simple_a");
-  // gen.set_mode(autogen::GENERATE_CUDA);
+   gen.set_mode(autogen::GENERATE_CUDA);
   // gen.set_mode(autogen::GENERATE_NONE);
   std::vector<double> jacobian;
   for (int i = 0; i < 5; ++i) {

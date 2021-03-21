@@ -35,8 +35,10 @@ struct FunctionTrace {
   using CGAtomicFunBridge = typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
 
   std::string name;
-  // TODO try to avoid pointers
-  ADFun *tape{nullptr};
+
+  std::shared_ptr<ADFun> tape{nullptr};
+  // TODO fix memory leak here (bridge cannot be destructed without triggering
+  // atomic_index exception in debug mode)
   CGAtomicFunBridge *bridge{nullptr};
 
   std::vector<BaseScalar> trace_input;
@@ -48,10 +50,13 @@ struct FunctionTrace {
   std::vector<ADCGScalar> ay;
 
   virtual ~FunctionTrace() {
-    delete tape;
-    // TODO atomic_base constructor in CppAD gets called twice and throws an
-    // exception
-    // delete bridge;
+    //  delete tape;
+    //  // TODO atomic_base destructor in CppAD gets called twice and throws an
+    //  // exception
+#ifdef NDEBUG
+    // we don't trigger the CPPAD_ASSERT here
+    //delete bridge;
+#endif
   }
 };
 
@@ -321,7 +326,7 @@ struct Generated {
       }
       CppAD::Independent(trace.ax);
       trace.functor(trace.ax, trace.ay);
-      trace.tape = new ADFun;
+      trace.tape = std::make_shared<ADFun>();
       trace.tape->Dependent(trace.ax, trace.ay);
       trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
     }
@@ -336,9 +341,11 @@ struct Generated {
     }
     CppAD::Independent(ax);
     (*f_cg_)(ax, ay);
-    trace.tape = new ADFun;
+    trace.tape = std::make_shared<ADFun>();
     trace.tape->Dependent(ax, ay);
     trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
+    trace.input_dim = input.size();
+    trace.output_dim = output.size();
     return trace;
   }
 
@@ -465,8 +472,7 @@ struct Generated {
 };
 
 template <typename BaseScalar = double>
-inline void call_atomic(const std::string &name,
-                        const ADFunctor<BaseScalar> &functor,
+inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
                         const std::vector<ADCG<BaseScalar>> &input,
                         std::vector<ADCG<BaseScalar>> &output) {
   using ADFun = typename FunctionTrace<BaseScalar>::ADFun;
@@ -513,8 +519,8 @@ inline void call_atomic(const std::string &name,
 
 inline void call_atomic(
     const std::string &name,
-    const std::function<void(const std::vector<double> &,
-                             std::vector<double> &)> &functor,
+    std::function<void(const std::vector<double> &, std::vector<double> &)>
+        functor,
     const std::vector<double> &input, std::vector<double> &output) {
   // no tracing occurs since the arguments are of type double
   functor(input, output);

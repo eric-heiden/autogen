@@ -71,10 +71,16 @@ class CudaLibraryProcessor {
     }
     if (find_nvcc) {
 #if CPPAD_CG_SYSTEM_WIN
-      nvcc_path_ = autogen::exec("where nvcc");
+      nvcc_path_ =
+          autogen::exec("powershell -command \"(get-command nvcc).Path\"");
 #else
       nvcc_path_ = autogen::exec("which nvcc");
 #endif
+    }
+    if (nvcc_path_.size() < 3) {
+      std::cerr << "NVIDIA CUDA Compiler (nvcc) could not be found. Make sure "
+                   "\"nvcc\" is accessible from the system path.\n";
+      std::exit(1);
     }
   }
 
@@ -207,6 +213,7 @@ class CudaLibraryProcessor {
         << "--shared ";
     cmd << (src_dir_ / (library_name_ + ".cu")).string();
     autogen::Stopwatch timer;
+    std::cout << "\n\n" << cmd.str() << "\n\n";
     timer.start();
     int return_code = std::system(cmd.str().c_str());
     timer.stop();

@@ -1,2 +1,2 @@
 add_executable(basic_codegen basic_codegen.cpp)
-target_link_libraries(basic_codegen ${CMAKE_DL_LIBS} pthread autogen)
+target_link_libraries(basic_codegen autogen)
