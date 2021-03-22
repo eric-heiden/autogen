@@ -246,17 +246,18 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
   /**
    * Generate CUDA library code for the forward one pass.
    */
-  std::string forward_one_source();
+  std::string forward_one_source(
+      std::vector<std::pair<std::string, std::string>> &sources);
 
  protected:
   void generateSparseForwardOneSourcesWithAtomics(
       const std::map<size_t, std::vector<size_t>> &elements,
-      std::ostringstream &code, CudaVariableNameGenerator<Base> &nameGen,
-      LanguageCuda<Base> &langC, CppAD::cg::CodeHandler<Base> &handler);
+      std::ostringstream &code,
+      std::vector<std::pair<std::string, std::string>> &sources);
   void generateSparseForwardOneSourcesNoAtomics(
       const std::map<size_t, std::vector<size_t>> &elements,
-      std::ostringstream &code, CudaVariableNameGenerator<Base> &nameGen,
-      LanguageCuda<Base> &langC, CppAD::cg::CodeHandler<Base> &handler);
+      std::ostringstream &code,
+      std::vector<std::pair<std::string, std::string>> &sources);
 };
 
 }  // namespace autogen

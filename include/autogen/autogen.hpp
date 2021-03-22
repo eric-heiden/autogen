@@ -110,6 +110,7 @@ static inline std::string str(const GenerationMode &mode) {
     case GENERATE_CUDA:
       return "CUDA";
   }
+  return "Unknown";
 }
 
 static inline std::ostream &operator<<(std::ostream &os,

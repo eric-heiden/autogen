@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
   std::vector<double> jacobian;
   std::vector<std::vector<double>> outputs(1);
 
-  try {
+  // try {
     std::cout << "### Mode: " << gen.mode() << std::endl;
     for (int i = 0; i < 2; ++i) {
       gen(input, output);
@@ -71,9 +71,9 @@ int main(int argc, char *argv[]) {
     outputs[0].resize(dim);
     gen({input}, outputs);
     print(outputs[0]);
-  } catch (const std::exception &e) {
-    std::cerr << e.what() << std::endl;
-  }
+  // } catch (const std::exception &e) {
+  //   std::cerr << e.what() << std::endl;
+  // }
 
   gen.set_mode(autogen::GENERATE_NONE);
   std::cout << "### Mode: " << gen.mode() << std::endl;

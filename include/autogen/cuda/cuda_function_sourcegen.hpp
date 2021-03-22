@@ -16,6 +16,8 @@ struct CudaFunctionSourceGen {
   int output_dim;
   CudaAccumulationMethod acc_method;
 
+  bool is_forward_one{false};
+
   CudaFunctionSourceGen(const std::string &function_name, int local_input_dim,
                         int global_input_dim, int output_dim,
                         CudaAccumulationMethod acc_method)
@@ -56,33 +58,46 @@ struct CudaFunctionSourceGen {
       code << "int num_total_threads,\n";
       code << fun_arg_pad;
     }
-    code << "Float *output,\n";
-    code << fun_arg_pad << "const Float *local_input";
-    if (global_input_dim > 0) {
-      code << ",\n" << fun_arg_pad << "const Float *global_input";
+    if (is_forward_one) {
+      code << "Float *const *out,\n";
+      code << fun_arg_pad << "Float const *const *in";
+    } else {
+      code << "Float *output,\n";
+      code << fun_arg_pad << "const Float *local_input";
+      if (global_input_dim > 0) {
+        code << ",\n" << fun_arg_pad << "const Float *global_input";
+      }
     }
     code << ") {\n";
-    if (!is_function) {
-      code << "  const int ti = blockIdx.x * blockDim.x + threadIdx.x;\n";
-      code << "  if (ti >= num_total_threads) {\n";
-      code << "    printf(\"ERROR: thread index %i in function \\\""
-           << function_name
-           << "\\\" exceeded provided "
-              "number of total threads %i.\\n\", ti, num_total_threads);\n";
-      code << "    return;\n  }\n";
-    }
-    code << "\n";
-    if (global_input_dim > 0) {
-      code << "  const Float *x = &(global_input[0]);  // global input\n";
-    }
-    if (!is_function) {
-      code << "  const Float *xj = &(local_input[ti * " << local_input_dim
-           << "]);  // thread-local input\n";
-      code << "  Float *y = &(output[ti * " << output_dim << "]);\n";
+    if (is_forward_one) {
+      code << "  // independent variables\n";
+      code << "  const double* x = in[0];\n";
+      code << "  const double* dx = in[1];\n\n";
+      code << "  // dependent variables\n";
+      code << "  double* dy = out[0];\n\n";
     } else {
-      code << "  const Float *xj = &(local_input[0]);  // thread-local "
-              "input\n";
-      code << "  Float *y = &(output[0]);\n";
+      if (!is_function) {
+        code << "  const int ti = blockIdx.x * blockDim.x + threadIdx.x;\n";
+        code << "  if (ti >= num_total_threads) {\n";
+        code << "    printf(\"ERROR: thread index %i in function \\\""
+             << function_name
+             << "\\\" exceeded provided "
+                "number of total threads %i.\\n\", ti, num_total_threads);\n";
+        code << "    return;\n  }\n";
+      }
+      code << "\n";
+      if (global_input_dim > 0) {
+        code << "  const Float *x = &(global_input[0]);  // global input\n";
+      }
+      if (!is_function) {
+        code << "  const Float *xj = &(local_input[ti * " << local_input_dim
+             << "]);  // thread-local input\n";
+        code << "  Float *y = &(output[ti * " << output_dim << "]);\n";
+      } else {
+        code << "  const Float *xj = &(local_input[0]);  // thread-local "
+                "input\n";
+        code << "  Float *y = &(output[0]);\n";
+      }
     }
 
     auto &info = language.getInfo();

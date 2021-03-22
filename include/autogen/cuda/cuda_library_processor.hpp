@@ -140,7 +140,7 @@ class CudaLibraryProcessor {
       if (cgen->isCreateSparseForwardOne()) {
         std::string src_name = cgen->getName() + "_forward_one." + extension;
         // generate CUDA code
-        std::string source = cgen->forward_one_source();
+        std::string source = cgen->forward_one_source(sources_);
         sources_.push_back(std::make_pair(src_name, source));
         gen_srcs_.push_back(src_name);
       }

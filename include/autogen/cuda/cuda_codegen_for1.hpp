@@ -2,9 +2,9 @@ namespace autogen {
 
 template <class Base>
 void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesWithAtomics(
-    const std::map<size_t, std::vector<size_t> >& elements,
-    std::ostringstream& code, CudaVariableNameGenerator<Base>& nameGen,
-    LanguageCuda<Base>& langC, CppAD::cg::CodeHandler<Base> &handler) {
+    const std::map<size_t, std::vector<size_t>>& elements,
+    std::ostringstream& code,
+    std::vector<std::pair<std::string, std::string>>& sources) {
   using std::vector;
 
   /**
@@ -28,7 +28,7 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesWithAtomics(
 
     this->startingJob("'" + subJobName + "'", CppAD::cg::JobTimer::GRAPH);
 
-    // CppAD::cg::CodeHandler<Base> handler;
+    CppAD::cg::CodeHandler<Base> handler;
     handler.setJobTimer(this->_jobTimer);
 
     vector<CGBase> indVars(n);
@@ -59,7 +59,9 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesWithAtomics(
 
     this->finishedJob();
 
-    // LanguageCuda<Base> langC;
+    std::ostringstream fun_body;
+
+    LanguageCuda<Base> langC(false);
     langC.setMaxAssignmentsPerFunction(this->_maxAssignPerFunc,
                                        &this->_sources);
     langC.setMaxOperationsPerAssignment(this->_maxOperationsPerAssignment);
@@ -69,28 +71,51 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesWithAtomics(
     // langC.setGenerateFunction(this->_cache.str());
     langC.setGenerateFunction("");
 
-    // std::ostringstream code;
-
     // CudaVariableNameGenerator<Base> nameGen(global_input_dim_);
-    handler.generateCode(code, langC, dyCustom, nameGen, this->_atomicFunctions,
-                         subJobName);
-
-    // std::unique_ptr<CppAD::cg::VariableNameGenerator<Base> > nameGen(
-    //     this->createVariableNameGenerator("dy"));
-    // CppAD::cg::LangCDefaultHessianVarNameGenerator<Base> nameGenHess(
-    //     nameGen.get(), "dx", n);
-    // handler.generateCode(code, langC, dyCustom, nameGenHess,
+    // handler.generateCode(fun_body, langC, dyCustom, nameGen,
     //                      this->_atomicFunctions, subJobName);
 
-    std::cout << code.str() << std::endl;
+    std::unique_ptr<CppAD::cg::VariableNameGenerator<Base>> nameGen(
+        this->createVariableNameGenerator("dy"));
+    CppAD::cg::LangCDefaultHessianVarNameGenerator<Base> nameGenHess(
+        nameGen.get(), "dx", n);
+    handler.generateCode(fun_body, langC, dyCustom, nameGenHess,
+                         this->_atomicFunctions, subJobName);
+
+    std::string fun_name = std::string(this->_name) +
+                           "_sparse_forward_one_indep" + std::to_string(j);
+    CudaFunctionSourceGen generator(fun_name, local_input_dim(),
+                                    global_input_dim_, output_dim(),
+                                    CUDA_ACCUMULATE_NONE);
+    generator.is_forward_one = true;
+
+    std::ostringstream complete;
+    // complete << "__device__\n";
+    // complete << fun_body.str();
+
+    if (!kernel_only_) {
+      generator.emit_header(complete);
+    }
+    //   LanguageCuda<Base> langC;
+    generator.emit_kernel(complete, fun_body, langC, kernel_only_);
+    if (!kernel_only_) {
+      generator.emit_allocation_functions(complete);
+      generator.emit_send_functions(complete);
+      generator.emit_kernel_launch(complete);
+    }
+
+    std::string filename = fun_name + ".cuh";
+    sources.push_back(std::make_pair(filename, complete.str()));
+
+    code << "#include \"" << filename << "\"\n";
   }
 }
 
 template <class Base>
 void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesNoAtomics(
-    const std::map<size_t, std::vector<size_t> >& elements,
-    std::ostringstream& code, CudaVariableNameGenerator<Base>& nameGen,
-    LanguageCuda<Base>& langC, CppAD::cg::CodeHandler<Base> &handler) {
+    const std::map<size_t, std::vector<size_t>>& elements,
+    std::ostringstream& code,
+    std::vector<std::pair<std::string, std::string>>& sources) {
   using std::vector;
 
   /**
@@ -98,7 +123,7 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesNoAtomics(
    */
   size_t n = this->_fun.Domain();
 
-//   CppAD::cg::CodeHandler<Base> handler;
+  CppAD::cg::CodeHandler<Base> handler;
   handler.setJobTimer(this->_jobTimer);
 
   vector<CGBase> x(n);
@@ -125,8 +150,8 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesNoAtomics(
   /**
    * organize results
    */
-  std::map<size_t, vector<CGBase> > jac;                  // by column
-  std::map<size_t, std::map<size_t, size_t> > positions;  // by column
+  std::map<size_t, vector<CGBase>> jac;                  // by column
+  std::map<size_t, std::map<size_t, size_t>> positions;  // by column
 
   for (const auto& it : elements) {
     size_t j = it.first;
@@ -153,7 +178,7 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesNoAtomics(
   /**
    * Create source for each independent/column
    */
-  typename std::map<size_t, vector<CGBase> >::iterator itJ;
+  typename std::map<size_t, vector<CGBase>>::iterator itJ;
   for (itJ = jac.begin(); itJ != jac.end(); ++itJ) {
     size_t j = itJ->first;
     vector<CGBase>& dyCustom = itJ->second;
@@ -162,7 +187,9 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesNoAtomics(
     this->_cache << "model (forward one, indep " << j << ")";
     const std::string subJobName = this->_cache.str();
 
-    // LanguageCuda<Base> langC;
+    std::ostringstream fun_body;
+
+    LanguageCuda<Base> langC;
     langC.setMaxAssignmentsPerFunction(this->_maxAssignPerFunc,
                                        &this->_sources);
     langC.setMaxOperationsPerAssignment(this->_maxOperationsPerAssignment);
@@ -171,28 +198,79 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesNoAtomics(
     // this->_cache << this->_name << "_sparse_for1_indep" << j;
     langC.setGenerateFunction("");  // this->_cache.str());
 
-    // std::ostringstream code;
-
     // CudaVariableNameGenerator<Base> nameGen(global_input_dim_);
-    handler.generateCode(code, langC, dyCustom, nameGen, this->_atomicFunctions,
-                         subJobName);
-
-    // std::unique_ptr<CppAD::cg::VariableNameGenerator<Base> > nameGen(
-    //     this->createVariableNameGenerator("dy"));
-    // CppAD::cg::LangCDefaultHessianVarNameGenerator<Base> nameGenHess(
-    //     nameGen.get(), "dx", n);
-    // handler.generateCode(code, langC, dyCustom, nameGenHess,
+    // handler.generateCode(fun_body, langC, dyCustom, nameGen,
     //                      this->_atomicFunctions, subJobName);
 
-    std::cout << code.str() << std::endl;
+    std::unique_ptr<CppAD::cg::VariableNameGenerator<Base>> nameGen(
+        this->createVariableNameGenerator("dy"));
+    CppAD::cg::LangCDefaultHessianVarNameGenerator<Base> nameGenHess(
+        nameGen.get(), "dx", n);
+    handler.generateCode(fun_body, langC, dyCustom, nameGenHess,
+                         this->_atomicFunctions, subJobName);
+
+    // std::cout << code.str() << std::endl;
+
+    std::string fun_name = std::string(this->_name) +
+                           "_sparse_forward_one_indep" + std::to_string(j);
+    CudaFunctionSourceGen generator(fun_name, local_input_dim(),
+                                    global_input_dim_, output_dim(),
+                                    CUDA_ACCUMULATE_NONE);
+    generator.is_forward_one = true;
+
+    std::ostringstream complete;
+
+    if (!kernel_only_) {
+      generator.emit_header(complete);
+    }
+    //   LanguageCuda<Base> langC;
+    generator.emit_kernel(complete, fun_body, langC, kernel_only_);
+    if (!kernel_only_) {
+      generator.emit_allocation_functions(complete);
+      generator.emit_send_functions(complete);
+      generator.emit_kernel_launch(complete);
+    }
+
+    std::string filename = fun_name + ".cuh";
+    sources.push_back(std::make_pair(filename, complete.str()));
+
+    code << "#include \"" << filename << "\"\n";
   }
+}
+
+std::string directional_function_source(
+    const std::string& function,
+    const std::map<size_t, std::vector<size_t>>& elements) {
+  std::stringstream code;
+  std::string fun_title = "int " + function + "(";
+  code << "__device__\n";
+  code << fun_title << "unsigned long pos,\n";
+  code << std::string(fun_title.size(), ' ') << "Float *const *out,\n";
+  code << std::string(fun_title.size(), ' ') << "Float const *const *in) {\n";
+  code << "  switch(pos) {\n";
+  for (const auto& it : elements) {
+    // the size of each sparsity row
+    code << "    case " << it.first
+         << ":\n"
+            "         "
+         << function << "_"
+         << "indep" << it.first
+         << "(out, in);\n"
+            "      return 0; // done\n";
+  }
+  code << "    default:\n"
+          "      return 1; // error\n"
+          "  };\n";
+  code << "}\n";
+  return code.str();
 }
 
 /**
  * Generate CUDA library code for the forward one pass.
  */
 template <class Base>
-std::string CudaModelSourceGen<Base>::forward_one_source() {
+std::string CudaModelSourceGen<Base>::forward_one_source(
+    std::vector<std::pair<std::string, std::string>>& sources) {
   const std::string jobName = "model (first-order forward)";
 
   this->startingJob("'" + jobName + "'", CppAD::cg::JobTimer::GRAPH);
@@ -213,19 +291,19 @@ std::string CudaModelSourceGen<Base>::forward_one_source() {
             << this->_name << "\" with input dimension " << local_input_dim
             << " and output dimension " << output_dim << "...\n";
 
-//   std::vector<CGBase> indVars(local_input_dim + global_input_dim_);
-//   handler.makeVariables(indVars);
-//   if (this->_x.size() > 0) {
-//     for (std::size_t i = 0; i < indVars.size(); i++) {
-//       indVars[i].setValue(this->_x[i]);
-//     }
-//   }
+  //   std::vector<CGBase> indVars(local_input_dim + global_input_dim_);
+  //   handler.makeVariables(indVars);
+  //   if (this->_x.size() > 0) {
+  //     for (std::size_t i = 0; i < indVars.size(); i++) {
+  //       indVars[i].setValue(this->_x[i]);
+  //     }
+  //   }
 
-//   std::vector<CGBase> dep;
+  //   std::vector<CGBase> dep;
 
   this->determineJacobianSparsity();
   // elements[var]{equations}
-  std::map<size_t, std::vector<size_t> > elements;
+  std::map<size_t, std::vector<size_t>> elements;
   for (size_t e = 0; e < this->_jacSparsity.rows.size(); e++) {
     elements[this->_jacSparsity.cols[e]].push_back(this->_jacSparsity.rows[e]);
   }
@@ -235,44 +313,130 @@ std::string CudaModelSourceGen<Base>::forward_one_source() {
 
   std::ostringstream code;
 
-  CudaVariableNameGenerator<Base> nameGen(global_input_dim_);
-  LanguageCuda<Base> langC;
+  //   CudaVariableNameGenerator<Base> nameGen(global_input_dim_);
+  //   LanguageCuda<Base> langC;
   if (this->isAtomicsUsed()) {
-    generateSparseForwardOneSourcesWithAtomics(elements, code, nameGen, langC, handler);
+    generateSparseForwardOneSourcesWithAtomics(elements, code, sources);
   } else {
-    generateSparseForwardOneSourcesNoAtomics(elements, code, nameGen, langC, handler);
+    generateSparseForwardOneSourcesNoAtomics(elements, code, sources);
   }
 
-  std::size_t temporary_dim = nameGen.getMaxTemporaryVariableID() + 1 -
-                              nameGen.getMinTemporaryVariableID();
-  if (temporary_dim == 0) {
-    std::cerr << "Warning: generated code has no temporary variables.\n";
-  } else {
-    std::cout << "Code generated with " << temporary_dim
-              << " temporary variables.\n";
+  code << "\n";
+
+  const std::string sparse_for1_function =
+      std::string(this->_name) + "_sparse_forward_one";
+  code << directional_function_source(sparse_for1_function, elements);
+
+  const std::string sparsity_function =
+      std::string(this->_name) + "_forward_one_sparsity";
+  this->_cache.str("");
+  this->generateSparsity1DSource2(sparsity_function, elements);
+  code << "\n__device__\n" << this->_cache.str() << "\n";
+
+  size_t m = this->_fun.Range();
+  size_t n = this->_fun.Domain();
+
+  const std::string model_function = std::string(this->_name) + "_forward_one";
+  code << "__device__\n";
+  LanguageCuda<Base>::printFunctionDeclaration(
+      code, "int", model_function, {"Float *ty", "const Float *tx"});
+  code << " {\n"
+          "  unsigned long ePos, ej, i, j, nnz, nnzMax;\n"
+          "  unsigned long const* pos;\n"
+          "  unsigned long txPos[" << n << "];\n"
+        //   "  unsigned long* txPosTmp;\n"
+          "  unsigned long nnzTx;\n"
+          "  "
+       << "Float const * in[2];\n"
+          "  "
+       << "Float* out[1];\n"
+          "  "
+       << "Float  x[" << n
+       << "];\n"
+          "  "
+       << "Float compressed[" << n << "];\n"
+          "  int ret;\n"
+          "\n"
+        //   "  txPos = 0;\n"
+          "  nnzTx = 0;\n"
+          "  nnzMax = 0;\n"
+          "  for (j = 0; j < "
+       << n
+       << "; j++) {\n"
+          "     if (tx[j * 2 + 1] != 0.0) {\n"
+          "        "
+       << sparsity_function
+       << "(j, &pos, &nnz);\n"
+          "        if (nnz > nnzMax)\n"
+          "           nnzMax = nnz;\n"
+          "        else if (nnz == 0)\n"
+          "           continue;\n"
+          "        nnzTx++;\n"
+        //   "        txPosTmp = (unsigned long*) realloc(txPos, nnzTx * "
+        //   "sizeof(unsigned long));\n"
+        //   "        if (txPosTmp != NULL) {\n"
+        //   "           txPos = txPosTmp;\n"
+        //   "        } else {\n"
+        //   "           free(txPos);\n"
+        //   "           return -1; // failure to allocate memory\n"
+        //   "        }\n"
+          "        txPos[nnzTx - 1] = j;\n"
+          "     }\n"
+          "  }\n"
+          "  for (i = 0; i < "
+       << m
+       << "; i++) {\n"
+          "     ty[i * 2 + 1] = 0;\n"
+          "  }\n"
+          "\n"
+        //   "  if (nnzTx == 0) {\n"
+        //   "     free(txPos);\n"
+        //   "     return 0; // nothing to do\n"
+        //   "  }\n"
+        //   "\n"
+    //       "  compressed = ("
+    //    << "Float *) malloc(nnzMax * sizeof(Float));\n"
+          "\n"
+          "  for (j = 0; j < "
+       << n
+       << "; j++)\n"
+          "     x[j] = tx[j * 2];\n"
+          "\n"
+          "  for (ej = 0; ej < nnzTx; ej++) {\n"
+          "     j = txPos[ej];\n"
+          "     "
+       << sparsity_function
+       << "(j, &pos, &nnz);\n"
+          "\n"
+          "     in[0] = x;\n"
+          "     in[1] = &tx[j * 2 + 1];\n"
+          "     out[0] = compressed;\n";
+  if (!this->_loopTapes.empty()) {
+    code << "     for(ePos = 0; ePos < nnz; ePos++)\n"
+            "        compressed[ePos] = 0;\n"
+            "\n";
   }
-  // for (const auto& var : nameGen.getTemporary()) {
-  //   std::cout << "\t" << var.name << std::endl;
-  // }
+  code << "     ret = " << sparse_for1_function << "(j, "
+       << "out, in"  // args
+       << ");\n"
+          "\n"
+          "     if (ret != 0) {\n"
+        //   "        free(compressed);\n"
+        //   "        free(txPos);\n"
+          "        return ret;\n"
+          "     }\n"
+          "\n"
+          "     for (ePos = 0; ePos < nnz; ePos++) {\n"
+          "        ty[pos[ePos] * 2 + 1] += compressed[ePos];\n"
+          "     }\n"
+          "\n"
+          "  }\n"
+        //   "  free(compressed);\n"
+        //   "  free(txPos);\n"
+          "  return 0;\n"
+          "}\n";
 
-  CudaFunctionSourceGen generator(std::string(this->_name) + "_forward_one",
-                                  local_input_dim, global_input_dim_,
-                                  output_dim, CUDA_ACCUMULATE_NONE);
-
-  std::ostringstream complete;
-
-  if (!kernel_only_) {
-    generator.emit_header(complete);
-  }
-//   LanguageCuda<Base> langC;
-  generator.emit_kernel(complete, code, langC, kernel_only_);
-  if (!kernel_only_) {
-    generator.emit_allocation_functions(complete);
-    generator.emit_send_functions(complete);
-    generator.emit_kernel_launch(complete);
-  }
-
-  return complete.str();
+  return code.str();
 }
 
 }  // namespace autogen

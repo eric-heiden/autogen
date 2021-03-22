@@ -21,9 +21,11 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
   using LanguageC::isOffsetBy;
   using LanguageC::isSameArgument;
 
+  bool assume_cuda_namegen{true};
+
  public:
-  LanguageCuda(size_t spaces = 2)
-      : CppAD::cg::LanguageC<Base>("Float", spaces) {}
+  LanguageCuda(bool assume_cuda_namegen = true, size_t spaces = 2)
+      : CppAD::cg::LanguageC<Base>("Float", spaces), assume_cuda_namegen(assume_cuda_namegen) {}
 
   std::unique_ptr<CppAD::cg::LanguageGenerationData<Base>> &getInfo() {
     return this->_info;
@@ -244,6 +246,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
         else
           arrayAssign << indep << "[" << offset << " + i]";
 
+if (assume_cuda_namegen) {
         auto *cudaNameGen =
             static_cast<CudaVariableNameGenerator<Base> *>(this->_nameGen);
 
@@ -268,6 +271,20 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
               << "[i] = " << cudaNameGen->local_name() << "[" << offset
               << " + i];\n";
         }
+} else {
+    /**
+     * print the loop
+     */
+    this->_streamStack << this->_indentation << "for(i = " << starti << "; i < " << i << "; i++) "
+                 << this->_auxArrayName << "[i] = " << arrayAssign.str() << ";\n";
+
+    /**
+     * update values in the global temporary array
+     */
+    for (size_t ii = starti; ii < i; ii++) {
+        tmpArrayValues[startPos + ii] = &args[ii];
+    }
+}
 
         return i;
 
