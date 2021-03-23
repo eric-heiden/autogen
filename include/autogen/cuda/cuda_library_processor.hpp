@@ -7,6 +7,7 @@
 #endif
 
 #include "autogen/utils/stopwatch.hpp"
+#include "cuda_language.hpp"
 #include "cuda_codegen.hpp"
 
 namespace autogen {
@@ -59,6 +60,11 @@ class CudaLibraryProcessor {
 
   std::vector<std::pair<std::string, std::string>> sources_;
 
+  /**
+   * Whether to compile the CUDA library with debug symbols.
+   */
+  bool debug_mode_{false};
+
  public:
   CudaLibraryProcessor(CudaModelSourceGen<Base> *model,
                        const std::string &library_name = "",
@@ -93,6 +99,9 @@ class CudaLibraryProcessor {
   int &optimization_level() { return optimization_level_; }
   const int &optimization_level() const { return optimization_level_; }
 
+  bool &debug_mode() { return debug_mode_; }
+  const bool &debug_mode() const { return debug_mode_; }
+
   const std::vector<CudaModelSourceGen<Base> *> &models() const {
     return models_;
   }
@@ -126,6 +135,7 @@ class CudaLibraryProcessor {
    */
   void generate_code() {
     gen_srcs_.clear();
+    LanguageCuda<Base>::add_debug_prints = debug_mode_;
     sources_.push_back(std::make_pair("util.h", util_header_src()));
     sources_.push_back(std::make_pair("model_info.h", model_info_header_src()));
     for (auto *cgen : models_) {
@@ -202,11 +212,14 @@ class CudaLibraryProcessor {
     std::cout << "Compiling CUDA library via " << nvcc_path_ << std::endl;
     cmd << "\"" << nvcc_path_ << "\" ";
     cmd << "--ptxas-options=-O" << std::to_string(optimization_level_) << ",-v "
-        << "-rdc=true "
+        << "-rdc=true ";
+    if (debug_mode_) {
+      cmd << "-G ";
+    }
 #if CPPAD_CG_SYSTEM_WIN
-        << "-o " << library_name_ << ".dll "
+    cmd << "-o " << library_name_ << ".dll "
 #else
-        << "--compiler-options "
+    cmd << "--compiler-options "
         << "-fPIC "
         << "-o " << library_name_ << ".so "
 #endif

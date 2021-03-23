@@ -240,27 +240,44 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesNoAtomics(
 
 std::string directional_function_source(
     const std::string& function,
-    const std::map<size_t, std::vector<size_t>>& elements) {
+    const std::map<size_t, std::vector<size_t>>& elements, size_t input_dim) {
   std::stringstream code;
-  std::string fun_title = "int " + function + "(";
+  std::string fun_title = "int " + function + "_sparse_forward_one(";
   code << "__device__\n";
   code << fun_title << "unsigned long pos,\n";
-  code << std::string(fun_title.size(), ' ') << "Float *const *out,\n";
-  code << std::string(fun_title.size(), ' ') << "Float const *const *in) {\n";
+  code << std::string(fun_title.size(), ' ') << "Float* out,\n";
+  // code << std::string(fun_title.size(), ' ') << "Float dx,\n";
+  code << std::string(fun_title.size(), ' ') << "const Float* in) {\n";
+  // code << std::string(fun_title.size(), ' ') << "Float*const * out,\n";
+  // code << std::string(fun_title.size(), ' ') << "Float const *const * in)
+  // {\n";
+  code << "  Float compressed[" << input_dim << "];\n";
+  code << "  unsigned long const* idx;\n";
+  code << "  unsigned long nnz;\n\n";
+
   code << "  switch(pos) {\n";
   for (const auto& it : elements) {
     // the size of each sparsity row
     code << "    case " << it.first
          << ":\n"
-            "         "
-         << function << "_"
-         << "indep" << it.first
-         << "(out, in);\n"
-            "      return 0; // done\n";
+            "      "
+         << function << "_sparse_forward_one_indep" << it.first
+         << "(compressed, in);\n"
+            "      break;\n";
   }
   code << "    default:\n"
-          "      return 1; // error\n"
-          "  };\n";
+          "      printf(\"Error: cannot compute functional derivative %u for \\\""
+       << function << "_sparse_forward_one\\\".\\n\", pos);\n";
+  code << "      return 1;\n"
+          "  };\n\n";
+
+  code << "  " << function << "_forward_one_sparsity(pos, &idx, &nnz);\n\n";
+
+  code << "  for (unsigned long ePos = 0; ePos < nnz; ePos++) {\n";
+  code << "    out[idx[ePos]] += compressed[ePos];\n";
+  code << "  }\n";
+
+  code << "  return 0;\n";
   code << "}\n";
   return code.str();
 }
@@ -313,8 +330,6 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
 
   std::ostringstream code;
 
-  //   CudaVariableNameGenerator<Base> nameGen(global_input_dim_);
-  //   LanguageCuda<Base> langC;
   if (this->isAtomicsUsed()) {
     generateSparseForwardOneSourcesWithAtomics(elements, code, sources);
   } else {
@@ -323,28 +338,30 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
 
   code << "\n";
 
-  const std::string sparse_for1_function =
-      std::string(this->_name) + "_sparse_forward_one";
-  code << directional_function_source(sparse_for1_function, elements);
-
   const std::string sparsity_function =
       std::string(this->_name) + "_forward_one_sparsity";
   this->_cache.str("");
   this->generateSparsity1DSource2(sparsity_function, elements);
   code << "\n__device__\n" << this->_cache.str() << "\n";
 
+  code << directional_function_source(this->_name, elements,
+                                      this->_fun.Domain());
+
+#if 0  
   size_t m = this->_fun.Range();
   size_t n = this->_fun.Domain();
 
   const std::string model_function = std::string(this->_name) + "_forward_one";
   code << "__device__\n";
   LanguageCuda<Base>::printFunctionDeclaration(
-      code, "int", model_function, {"Float *ty", "const Float *tx"});
+      code, "int", model_function, {"Float ty[]", "Float const tx[]"});
   code << " {\n"
           "  unsigned long ePos, ej, i, j, nnz, nnzMax;\n"
           "  unsigned long const* pos;\n"
-          "  unsigned long txPos[" << n << "];\n"
-        //   "  unsigned long* txPosTmp;\n"
+          "  unsigned long txPos["
+       << n
+       << "];\n"
+          //   "  unsigned long* txPosTmp;\n"
           "  unsigned long nnzTx;\n"
           "  "
        << "Float const * in[2];\n"
@@ -354,24 +371,38 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
        << "Float  x[" << n
        << "];\n"
           "  "
-       << "Float compressed[" << n << "];\n"
+       << "Float compressed[" << n
+       << "];\n"
           "  int ret;\n"
-          "\n"
-        //   "  txPos = 0;\n"
-          "  nnzTx = 0;\n"
+          "\n";
+
+
+  code << "  printf(\"\\n\\n"
+       << model_function << "\\n\");\n"
+       << "  printf(\"tx[]:  \"); for (i = 0; i < " << n
+       << ";++i) printf(\"%f   \", tx[i]); printf(\"\\n\");\n";
+
+
+
+          //   "  txPos = 0;\n"
+  code <<  "  nnzTx = 0;\n"
           "  nnzMax = 0;\n"
           "  for (j = 0; j < "
        << n
        << "; j++) {\n"
-          "     if (tx[j * 2 + 1] != 0.0) {\n"
+          //"    printf(\"j: %u   \", j);\n"
+          //"    if (tx[j * 2 + 1] != 0.0) {\n"
+          "    if (tx[j] != 0.0) {\n"
           "        "
        << sparsity_function
        << "(j, &pos, &nnz);\n"
-          "        if (nnz > nnzMax)\n"
-          "           nnzMax = nnz;\n"
-          "        else if (nnz == 0)\n"
-          "           continue;\n"
-          "        nnzTx++;\n"
+          "      if (nnz > nnzMax)\n"
+          "        nnzMax = nnz;\n"
+          "      else if (nnz == 0)\n"
+          "        continue;\n"
+          "      nnzTx++;\n"
+          "      printf(\""
+       << model_function << "    nnzTx:  %u\\n\", nnzTx);\n"
         //   "        txPosTmp = (unsigned long*) realloc(txPos, nnzTx * "
         //   "sizeof(unsigned long));\n"
         //   "        if (txPosTmp != NULL) {\n"
@@ -380,13 +411,14 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
         //   "           free(txPos);\n"
         //   "           return -1; // failure to allocate memory\n"
         //   "        }\n"
-          "        txPos[nnzTx - 1] = j;\n"
-          "     }\n"
+          "      txPos[nnzTx - 1] = j;\n"
+          "    }\n"
           "  }\n"
           "  for (i = 0; i < "
        << m
        << "; i++) {\n"
-          "     ty[i * 2 + 1] = 0;\n"
+          //"    ty[i * 2 + 1] = 0;\n"
+          "    ty[i] = 0;\n"
           "  }\n"
           "\n"
         //   "  if (nnzTx == 0) {\n"
@@ -400,41 +432,51 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
           "  for (j = 0; j < "
        << n
        << "; j++)\n"
-          "     x[j] = tx[j * 2];\n"
+
+
+
+          //"    x[j] = tx[j * 2];\n"
+
+
+          "    x[j] = tx[j];\n"
+
+
           "\n"
           "  for (ej = 0; ej < nnzTx; ej++) {\n"
-          "     j = txPos[ej];\n"
-          "     "
+          "    j = txPos[ej];\n"
+          "    "
        << sparsity_function
        << "(j, &pos, &nnz);\n"
           "\n"
-          "     in[0] = x;\n"
-          "     in[1] = &tx[j * 2 + 1];\n"
-          "     out[0] = compressed;\n";
+          "    in[0] = x;\n"
+          "    in[1] = &tx[j * 2 + 1];\n"
+          "    out[0] = compressed;\n";
   if (!this->_loopTapes.empty()) {
-    code << "     for(ePos = 0; ePos < nnz; ePos++)\n"
-            "        compressed[ePos] = 0;\n"
+    code << "    for(ePos = 0; ePos < nnz; ePos++)\n"
+            "      compressed[ePos] = 0;\n"
             "\n";
   }
   code << "     ret = " << sparse_for1_function << "(j, "
        << "out, in"  // args
        << ");\n"
           "\n"
-          "     if (ret != 0) {\n"
+          "    if (ret != 0) {\n"
         //   "        free(compressed);\n"
         //   "        free(txPos);\n"
-          "        return ret;\n"
-          "     }\n"
+          "      return ret;\n"
+          "    }\n"
           "\n"
-          "     for (ePos = 0; ePos < nnz; ePos++) {\n"
-          "        ty[pos[ePos] * 2 + 1] += compressed[ePos];\n"
-          "     }\n"
+          "    for (ePos = 0; ePos < nnz; ePos++) {\n"
+          "      ty[pos[ePos]] += compressed[ePos];\n"
+          //"      ty[pos[ePos] * 2 + 1] += compressed[ePos];\n"
+          "    }\n"
           "\n"
           "  }\n"
         //   "  free(compressed);\n"
         //   "  free(txPos);\n"
           "  return 0;\n"
           "}\n";
+#endif
 
   return code.str();
 }

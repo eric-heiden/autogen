@@ -59,8 +59,9 @@ struct CudaFunctionSourceGen {
       code << fun_arg_pad;
     }
     if (is_forward_one) {
-      code << "Float *const *out,\n";
-      code << fun_arg_pad << "Float const *const *in";
+      code << "Float *out,\n";
+      // code << fun_arg_pad << "Float const *const * in";
+      code << fun_arg_pad << "const Float *in";
     } else {
       code << "Float *output,\n";
       code << fun_arg_pad << "const Float *local_input";
@@ -71,10 +72,20 @@ struct CudaFunctionSourceGen {
     code << ") {\n";
     if (is_forward_one) {
       code << "  // independent variables\n";
-      code << "  const double* x = in[0];\n";
-      code << "  const double* dx = in[1];\n\n";
+      // code << "  const Float* x = in[0];\n";
+      // code << "  const Float* dx = in[1];\n\n";
+      code << "  const Float* x = in;\n";
+      // code << "  const Float* dx = in;\n\n";
+      code << "  const Float dx[1] = {1};\n\n";
       code << "  // dependent variables\n";
-      code << "  double* dy = out[0];\n\n";
+      // code << "  Float* dy = out[0];\n\n";
+      code << "  Float* dy = out;\n\n";
+
+      if (LanguageCuda<Base>::add_debug_prints) {
+        code << "  printf(\"\\t" << kernel_name << ":\\n\");\n";
+        code << "  printf(\"\\tx:  \"); for (int i = 0; i < " << local_input_dim
+             << ";++i) printf(\"%f  \", x[i]); printf(\"\\n\");\n";
+      }
     } else {
       if (!is_function) {
         code << "  const int ti = blockIdx.x * blockDim.x + threadIdx.x;\n";

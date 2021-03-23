@@ -48,9 +48,12 @@ void print(const std::vector<std::vector<double>> &vs) {
 int main(int argc, char *argv[]) {
   int dim = 4;
   std::vector<double> input(dim), output(dim);
+  std::cout << "\nInput:  ";
   for (int i = 0; i < dim; ++i) {
     input[i] = double(rand()) / RAND_MAX;
+    std::cout << input[i] << "  ";
   }
+  std::cout << std::endl << std::endl;
 
   autogen::Generated<simple_a> gen("simple_a");
   gen.set_mode(autogen::GENERATE_CUDA);
@@ -60,7 +63,7 @@ int main(int argc, char *argv[]) {
 
   // try {
     std::cout << "### Mode: " << gen.mode() << std::endl;
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 1; ++i) {
       gen(input, output);
       print(output);
 
@@ -68,9 +71,9 @@ int main(int argc, char *argv[]) {
       print(jacobian);
     }
 
-    outputs[0].resize(dim);
-    gen({input}, outputs);
-    print(outputs[0]);
+    //outputs[0].resize(dim);
+    //gen({input}, outputs);
+    //print(outputs[0]);
   // } catch (const std::exception &e) {
   //   std::cerr << e.what() << std::endl;
   // }

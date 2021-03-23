@@ -142,6 +142,11 @@ struct Generated {
    */
   double finite_diff_eps{1e-6};
 
+  /**
+  * Whether the generated code is compiled in debug mode (only applies to CPU and CUDA).
+  */
+  bool debug_mode{false};
+
  protected:
   std::unique_ptr<Functor<BaseScalar>> f_double_;
   std::unique_ptr<Functor<CppADScalar>> f_cppad_;
@@ -471,6 +476,9 @@ struct Generated {
     compiler->setSourcesFolder(name + "_cpu_srcs");
     compiler->setSaveToDiskFirst(true);
     compiler->addCompileFlag("-O" + std::to_string(1));
+    if (debug_mode) {
+      compiler->addCompileFlag("-g");
+    }
     p.setLibraryName(name + "_cpu");
     p.createDynamicLibrary(*compiler, false);
 
@@ -534,13 +542,12 @@ struct Generated {
       std::cout << "Adding cuda model " << *it << "\n";
       FunctionTrace<BaseScalar> &trace = CodeGenData<BaseScalar>::traces[*it];
       auto *source_gen = new CudaModelSourceGen<BaseScalar>(*(trace.tape), *it);
-      // source_gen->setCreateSparseJacobian(true);
-      // source_gen->setCreateJacobian(true);
       source_gen->setCreateForwardOne(true);
       source_gen->set_kernel_only(true);
       models.push_back(source_gen);
       cuda_proc.add_model(models.back(), false);
     }
+    cuda_proc.debug_mode() = debug_mode;
     cuda_proc.generate_code();
     cuda_proc.save_sources();
     cuda_proc.create_library();
