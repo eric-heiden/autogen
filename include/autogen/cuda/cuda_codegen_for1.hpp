@@ -365,7 +365,7 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
        << "  unsigned long ePos, ej, j, nnz;\n"
        << "  int ret;\n"
        << "  unsigned long const* pos;\n"
-       << "  Float compressed[" << n << "];\n"  // TODO should be m?
+       << "  Float compressed[" << m << "];\n"
        << "  const Float *dx_in;\n\n";
 
   if (LanguageCuda<Base>::add_debug_prints) {
@@ -373,11 +373,6 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
          << " idx:  \"); for (ej = 0; ej < nnzTx; ej++) printf(\"%u  \", "
             "idx[ej]); printf(\"\\n\");\n";
   }
-
-#if 1
-  //<< "  for (ePos = 0; ePos < " << n << "; ePos++) {\n"
-  //<< "    out[ePos] = 0;\n"
-  //<< "  }\n"
 
   code << "  for (ej = 0; ej < nnzTx; ej++) {\n"
        << "    j = idx[ej];\n"
@@ -394,169 +389,6 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
        << "  }\n"
        << "  return 0;\n"
        << "}\n";
-#else
-  << "  unsigned long nnzMax = 0;\n"
-  << "  unsigned long nnzTx = 0;\n"
-  << "  unsigned long txPos[" << n << "];\n"
-  << "  for (j = 0; j < " << n
-  << "; j++) {\n"
-  //<< "    ej = idx[j];\n"
-  << "    if (dx[j] != 0.0) {\n"
-  << "      " << sparsity_function << "(j, &pos, &nnz);\n"
-  << "      if (nnz > nnzMax) nnzMax = nnz;\n"
-  << "      else if (nnz == 0) continue;\n"
-  << "      nnzTx++;\n"
-  << "      txPos[nnzTx - 1] = j;\n"
-  << "    }\n"
-  << "  }\n\n"
-
-  << "  for (j = 0; j < " << n << "; j++) {\n"
-  << "    out[j] = 0;\n"
-  << "  }\n"
-
-  << "  for (ej = 0; ej < nnzTx; ej++) {\n"
-  << "    j = txPos[ej];\n"
-  << "    " << sparsity_function << "(j, &pos, &nnz);\n"
-  << "    dx_in = &dx[j];\n"
-  << "    " << sparse_for1_function << "(j, compressed, x, dx_in);\n\n"
-  << "    for (ePos = 0; ePos < nnz; ePos++) {\n"
-  << "      out[pos[ePos]] += compressed[ePos];\n"
-  << "    }\n"
-  << "  }\n"
-
-  << "}\n";
-#endif
-
-#if 0  
-  size_t m = this->_fun.Range();
-  size_t n = this->_fun.Domain();
-
-  const std::string model_function = std::string(this->_name) + "_forward_one";
-  code << "__device__\n";
-  LanguageCuda<Base>::printFunctionDeclaration(
-      code, "int", model_function, {"Float ty[]", "Float const tx[]"});
-  code << " {\n"
-          "  unsigned long ePos, ej, i, j, nnz, nnzMax;\n"
-          "  unsigned long const* pos;\n"
-          "  unsigned long txPos["
-       << n
-       << "];\n"
-          //   "  unsigned long* txPosTmp;\n"
-          "  unsigned long nnzTx;\n"
-          "  "
-       << "Float const * in[2];\n"
-          "  "
-       << "Float* out[1];\n"
-          "  "
-       << "Float  x[" << n
-       << "];\n"
-          "  "
-       << "Float compressed[" << n
-       << "];\n"
-          "  int ret;\n"
-          "\n";
-
-
-  code << "  printf(\"\\n\\n"
-       << model_function << "\\n\");\n"
-       << "  printf(\"tx[]:  \"); for (i = 0; i < " << n
-       << ";++i) printf(\"%f   \", tx[i]); printf(\"\\n\");\n";
-
-
-
-          //   "  txPos = 0;\n"
-  code <<  "  nnzTx = 0;\n"
-          "  nnzMax = 0;\n"
-          "  for (j = 0; j < "
-       << n
-       << "; j++) {\n"
-          //"    printf(\"j: %u   \", j);\n"
-          //"    if (tx[j * 2 + 1] != 0.0) {\n"
-          "    if (tx[j] != 0.0) {\n"
-          "        "
-       << sparsity_function
-       << "(j, &pos, &nnz);\n"
-          "      if (nnz > nnzMax)\n"
-          "        nnzMax = nnz;\n"
-          "      else if (nnz == 0)\n"
-          "        continue;\n"
-          "      nnzTx++;\n"
-          "      printf(\""
-       << model_function << "    nnzTx:  %u\\n\", nnzTx);\n"
-        //   "        txPosTmp = (unsigned long*) realloc(txPos, nnzTx * "
-        //   "sizeof(unsigned long));\n"
-        //   "        if (txPosTmp != NULL) {\n"
-        //   "           txPos = txPosTmp;\n"
-        //   "        } else {\n"
-        //   "           free(txPos);\n"
-        //   "           return -1; // failure to allocate memory\n"
-        //   "        }\n"
-          "      txPos[nnzTx - 1] = j;\n"
-          "    }\n"
-          "  }\n"
-          "  for (i = 0; i < "
-       << m
-       << "; i++) {\n"
-          //"    ty[i * 2 + 1] = 0;\n"
-          "    ty[i] = 0;\n"
-          "  }\n"
-          "\n"
-        //   "  if (nnzTx == 0) {\n"
-        //   "     free(txPos);\n"
-        //   "     return 0; // nothing to do\n"
-        //   "  }\n"
-        //   "\n"
-    //       "  compressed = ("
-    //    << "Float *) malloc(nnzMax * sizeof(Float));\n"
-          "\n"
-          "  for (j = 0; j < "
-       << n
-       << "; j++)\n"
-
-
-
-          //"    x[j] = tx[j * 2];\n"
-
-
-          "    x[j] = tx[j];\n"
-
-
-          "\n"
-          "  for (ej = 0; ej < nnzTx; ej++) {\n"
-          "    j = txPos[ej];\n"
-          "    "
-       << sparsity_function
-       << "(j, &pos, &nnz);\n"
-          "\n"
-          "    in[0] = x;\n"
-          "    in[1] = &tx[j * 2 + 1];\n"
-          "    out[0] = compressed;\n";
-  if (!this->_loopTapes.empty()) {
-    code << "    for(ePos = 0; ePos < nnz; ePos++)\n"
-            "      compressed[ePos] = 0;\n"
-            "\n";
-  }
-  code << "     ret = " << sparse_for1_function << "(j, "
-       << "out, in"  // args
-       << ");\n"
-          "\n"
-          "    if (ret != 0) {\n"
-        //   "        free(compressed);\n"
-        //   "        free(txPos);\n"
-          "      return ret;\n"
-          "    }\n"
-          "\n"
-          "    for (ePos = 0; ePos < nnz; ePos++) {\n"
-          "      ty[pos[ePos]] += compressed[ePos];\n"
-          //"      ty[pos[ePos] * 2 + 1] += compressed[ePos];\n"
-          "    }\n"
-          "\n"
-          "  }\n"
-        //   "  free(compressed);\n"
-        //   "  free(txPos);\n"
-          "  return 0;\n"
-          "}\n";
-#endif
 
   return code.str();
 }
