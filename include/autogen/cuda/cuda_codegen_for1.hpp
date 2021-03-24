@@ -246,14 +246,11 @@ std::string directional_function_source(
   code << "__device__\n";
   code << fun_title << "unsigned long pos,\n";
   code << std::string(fun_title.size(), ' ') << "Float* out,\n";
-  // code << std::string(fun_title.size(), ' ') << "Float dx,\n";
-  code << std::string(fun_title.size(), ' ') << "const Float* in) {\n";
-  // code << std::string(fun_title.size(), ' ') << "Float*const * out,\n";
-  // code << std::string(fun_title.size(), ' ') << "Float const *const * in)
-  // {\n";
-  code << "  Float compressed[" << input_dim << "];\n";
-  code << "  unsigned long const* idx;\n";
-  code << "  unsigned long nnz;\n\n";
+  code << std::string(fun_title.size(), ' ') << "const Float* x,\n";
+  code << std::string(fun_title.size(), ' ') << "const Float* dx) {\n";
+  // code << "  Float compressed[" << input_dim << "];\n";
+  // code << "  unsigned long const* idx;\n";
+  // code << "  unsigned long nnz;\n\n";
 
   code << "  switch(pos) {\n";
   for (const auto& it : elements) {
@@ -261,23 +258,26 @@ std::string directional_function_source(
     code << "    case " << it.first
          << ":\n"
             "      "
-         << function << "_sparse_forward_one_indep" << it.first
-         << "(compressed, in);\n"
-            "      break;\n";
+         << function << "_sparse_forward_one_indep"
+         << it.first
+         //<< "(compressed, x, dx);\n"
+         << "(out, x, dx);\n"
+            "      return 0;\n";
   }
-  code << "    default:\n"
-          "      printf(\"Error: cannot compute functional derivative %u for \\\""
-       << function << "_sparse_forward_one\\\".\\n\", pos);\n";
+  code
+      << "    default:\n"
+         "      // printf(\"Error: cannot compute functional derivative %u for "
+         "\\\""
+      << function << "_sparse_forward_one\\\".\\n\", pos);\n";
   code << "      return 1;\n"
-          "  };\n\n";
+          "  };\n";
 
-  code << "  " << function << "_forward_one_sparsity(pos, &idx, &nnz);\n\n";
+  // code << "  " << function << "_forward_one_sparsity(pos, &idx, &nnz);\n\n";
 
-  code << "  for (unsigned long ePos = 0; ePos < nnz; ePos++) {\n";
-  code << "    out[idx[ePos]] += compressed[ePos];\n";
-  code << "  }\n";
+  // code << "  for (unsigned long ePos = 0; ePos < nnz; ePos++) {\n";
+  // code << "    out[idx[ePos]] += compressed[ePos];\n";
+  // code << "  }\n";
 
-  code << "  return 0;\n";
   code << "}\n";
   return code.str();
 }
@@ -346,6 +346,86 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
 
   code << directional_function_source(this->_name, elements,
                                       this->_fun.Domain());
+
+  size_t m = this->_fun.Range();
+  size_t n = this->_fun.Domain();
+
+  std::string sparse_for1_function =
+      std::string(this->_name) + "_sparse_forward_one";
+  const std::string model_function = std::string(this->_name) + "_forward_one";
+
+  // logic from functor_generic_model.hpp:466 (ForwardOne)
+
+  code << "\n__device__\n";
+  LanguageCuda<Base>::printFunctionDeclaration(
+      code, "int", model_function,
+      {"Float *out", "const Float *x", "const Float *dx",
+       "unsigned long nnzTx", "const unsigned long *idx"});
+  code << " {\n"
+       << "  unsigned long ePos, ej, j, nnz;\n"
+       << "  int ret;\n"
+       << "  unsigned long const* pos;\n"
+       << "  Float compressed[" << n << "];\n"  // TODO should be m?
+       << "  const Float *dx_in;\n\n";
+
+  if (LanguageCuda<Base>::add_debug_prints) {
+    code << "  printf(\"" << model_function
+         << " idx:  \"); for (ej = 0; ej < nnzTx; ej++) printf(\"%u  \", "
+            "idx[ej]); printf(\"\\n\");\n";
+  }
+
+#if 1
+  //<< "  for (ePos = 0; ePos < " << n << "; ePos++) {\n"
+  //<< "    out[ePos] = 0;\n"
+  //<< "  }\n"
+
+  code << "  for (ej = 0; ej < nnzTx; ej++) {\n"
+       << "    j = idx[ej];\n"
+       << "    " << sparsity_function << "(j, &pos, &nnz);\n"
+       << "    if (nnz == 0) continue;\n"
+       << "    dx_in = &dx[ej];\n"
+       << "    ret = " << sparse_for1_function
+       << "(j, compressed, x, dx_in);\n\n"
+       << "    if (ret != 0) return ret;\n"
+       << "    for (ePos = 0; ePos < nnz; ePos++) {\n"
+       << "      if (ej == 0) out[pos[ePos]] = 0;\n"
+       << "      out[pos[ePos]] += compressed[ePos];\n"
+       << "    }\n"
+       << "  }\n"
+       << "  return 0;\n"
+       << "}\n";
+#else
+  << "  unsigned long nnzMax = 0;\n"
+  << "  unsigned long nnzTx = 0;\n"
+  << "  unsigned long txPos[" << n << "];\n"
+  << "  for (j = 0; j < " << n
+  << "; j++) {\n"
+  //<< "    ej = idx[j];\n"
+  << "    if (dx[j] != 0.0) {\n"
+  << "      " << sparsity_function << "(j, &pos, &nnz);\n"
+  << "      if (nnz > nnzMax) nnzMax = nnz;\n"
+  << "      else if (nnz == 0) continue;\n"
+  << "      nnzTx++;\n"
+  << "      txPos[nnzTx - 1] = j;\n"
+  << "    }\n"
+  << "  }\n\n"
+
+  << "  for (j = 0; j < " << n << "; j++) {\n"
+  << "    out[j] = 0;\n"
+  << "  }\n"
+
+  << "  for (ej = 0; ej < nnzTx; ej++) {\n"
+  << "    j = txPos[ej];\n"
+  << "    " << sparsity_function << "(j, &pos, &nnz);\n"
+  << "    dx_in = &dx[j];\n"
+  << "    " << sparse_for1_function << "(j, compressed, x, dx_in);\n\n"
+  << "    for (ePos = 0; ePos < nnz; ePos++) {\n"
+  << "      out[pos[ePos]] += compressed[ePos];\n"
+  << "    }\n"
+  << "  }\n"
+
+  << "}\n";
+#endif
 
 #if 0  
   size_t m = this->_fun.Range();

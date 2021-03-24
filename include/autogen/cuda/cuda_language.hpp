@@ -109,11 +109,32 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
       // this->_streamStack << this->_indentation << fun_name << "_forward_one("
       //                   << this->_ATOMIC_TY << ", " << this->_ATOMIC_TX
       //                   << ");\n";
+
+
+        // find the index in "idx" array
+      //OperationNode<Base> &array = *ty[p];
+      OperationNode<Base> &array = *tx[1];
+      size_t nnz = array.getArguments().size();
+      //size_t size = array.getInfo()[0];
+      size_t id = this->getVariableID(array);
+
+      const std::string &aName = this->createVariableName(array);
+
+      //this->_streamStack << this->_indentation << fun_name
+      //                   << "_sparse_forward_one("
+      //                   << this->_C_SPARSE_INDEX_ARRAY << "[" << (id - 1)
+      //                   << "], " << this->_ATOMIC_TY << ", "
+      //                   << this->_ATOMIC_TX << ", " << aName 
+      //                   << ");\n";
+
       this->_streamStack << this->_indentation << fun_name
-                         << "_sparse_forward_one("
-                         << this->_C_SPARSE_INDEX_ARRAY << "[0], "
-                         << this->_ATOMIC_TY << ", " << this->_ATOMIC_TX
-                         << ");\n";
+                         << "_forward_one("
+                         << this->_ATOMIC_TY << ", "
+                         << this->_ATOMIC_TX << ", "
+                         << aName << ", " << nnz << ", "
+                         << "&" << this->_C_SPARSE_INDEX_ARRAY << "[" << (id - 1)
+                         << "]);\n";
+
     } else {
       throw std::runtime_error(
           "Encountered unhandled atomic forward function call for " + fun_name +

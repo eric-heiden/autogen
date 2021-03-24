@@ -11,15 +11,15 @@ enum CudaAccumulationMethod {
 
 struct CudaFunctionSourceGen {
   std::string function_name;
-  int local_input_dim;
-  int global_input_dim;
-  int output_dim;
+  size_t local_input_dim;
+  size_t global_input_dim;
+  size_t output_dim;
   CudaAccumulationMethod acc_method;
 
   bool is_forward_one{false};
 
-  CudaFunctionSourceGen(const std::string &function_name, int local_input_dim,
-                        int global_input_dim, int output_dim,
+  CudaFunctionSourceGen(const std::string &function_name, size_t local_input_dim,
+                        size_t global_input_dim, size_t output_dim,
                         CudaAccumulationMethod acc_method)
       : function_name(function_name),
         local_input_dim(local_input_dim),
@@ -61,7 +61,8 @@ struct CudaFunctionSourceGen {
     if (is_forward_one) {
       code << "Float *out,\n";
       // code << fun_arg_pad << "Float const *const * in";
-      code << fun_arg_pad << "const Float *in";
+      code << fun_arg_pad << "const Float *x,\n";
+      code << fun_arg_pad << "const Float *dx";
     } else {
       code << "Float *output,\n";
       code << fun_arg_pad << "const Float *local_input";
@@ -71,19 +72,19 @@ struct CudaFunctionSourceGen {
     }
     code << ") {\n";
     if (is_forward_one) {
-      code << "  // independent variables\n";
+      //code << "  // independent variables\n";
       // code << "  const Float* x = in[0];\n";
       // code << "  const Float* dx = in[1];\n\n";
-      code << "  const Float* x = in;\n";
+      //code << "  const Float* x = in;\n";
       // code << "  const Float* dx = in;\n\n";
-      code << "  const Float dx[1] = {1};\n\n";
+      //code << "  const Float dx[1] = {1};\n\n";
       code << "  // dependent variables\n";
       // code << "  Float* dy = out[0];\n\n";
       code << "  Float* dy = out;\n\n";
 
       if (LanguageCuda<Base>::add_debug_prints) {
         code << "  printf(\"\\t" << kernel_name << ":\\n\");\n";
-        code << "  printf(\"\\tx:  \"); for (int i = 0; i < " << local_input_dim
+        code << "  printf(\"\\tx:  \"); for (unsigned long i = 0; i < " << local_input_dim
              << ";++i) printf(\"%f  \", x[i]); printf(\"\\n\");\n";
       }
     } else {

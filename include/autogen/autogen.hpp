@@ -143,8 +143,9 @@ struct Generated {
   double finite_diff_eps{1e-6};
 
   /**
-  * Whether the generated code is compiled in debug mode (only applies to CPU and CUDA).
-  */
+   * Whether the generated code is compiled in debug mode (only applies to CPU
+   * and CUDA).
+   */
   bool debug_mode{false};
 
  protected:
@@ -266,12 +267,15 @@ struct Generated {
     }
     outputs.resize(local_inputs.size());
 
-    std::vector<BaseScalar> compilation_input;
-    compilation_input.insert(compilation_input.end(), global_input.begin(),
-                             global_input.end());
-    compilation_input.insert(compilation_input.end(), local_inputs[0].begin(),
-                             local_inputs[0].end());
-    conditionally_compile(compilation_input, outputs[0]);
+    if (!is_compiled()) {
+      global_input_dim_ = global_input.size();
+      std::vector<BaseScalar> compilation_input;
+      compilation_input.insert(compilation_input.end(), global_input.begin(),
+                               global_input.end());
+      compilation_input.insert(compilation_input.end(), local_inputs[0].begin(),
+                               local_inputs[0].end());
+      conditionally_compile(compilation_input, outputs[0]);
+    }
 
     if (mode_ == GENERATE_NONE) {
       // we may not assume the original function is thread-safe
@@ -317,20 +321,7 @@ struct Generated {
   void jacobian(const std::vector<BaseScalar> &input,
                 std::vector<BaseScalar> &output) {
     // TODO conditionally compile? (need to know output dim)
-
-    if (mode_ == GENERATE_CPU) {
-#if CPPAD_CG_SYSTEM_WIN
-      std::cerr << "CPU code generation is not yet available on Windows.\n";
-      return;
-#else
-      assert(!library_name_.empty());
-      GenericModelPtr &model = get_cpu_model();
-      model->Jacobian(input, output);
-#endif
-    } else if (mode_ == GENERATE_CUDA) {
-      const auto &model = get_cuda_model();
-      model.jacobian(input, output);
-    } else if (mode_ == GENERATE_NONE) {
+    if (mode_ == GENERATE_NONE) {
       // central difference
       assert(input.size() == input_dim());
       assert(output_dim() > 0);
@@ -348,6 +339,27 @@ struct Generated {
         }
         left_x[i] = right_x[i] = input[i];
       }
+    }
+
+    if (!is_compiled()) {
+      throw std::runtime_error("The function \"" + name +
+                               "\" has not yet been compiled in " + str(mode_) +
+                               " mode. You need to call the forward pass first "
+                               "to trigger the compilation of the Jacobian.\n");
+    }
+
+    if (mode_ == GENERATE_CPU) {
+#if CPPAD_CG_SYSTEM_WIN
+      std::cerr << "CPU code generation is not yet available on Windows.\n";
+      return;
+#else
+      assert(!library_name_.empty());
+      GenericModelPtr &model = get_cpu_model();
+      model->Jacobian(input, output);
+#endif
+    } else if (mode_ == GENERATE_CUDA) {
+      const auto &model = get_cuda_model();
+      model.jacobian(input, output);
     } else if (mode_ == GENERATE_CPPAD) {
       output = tape_->Jacobian(input);
     }
@@ -376,7 +388,6 @@ struct Generated {
       assert(!output.empty());
       local_input_dim_ = input.size();
       output_dim_ = output.size();
-      // TODO set global_input_dim_
       FunctionTrace<BaseScalar> t = trace(input, output);
       if (compile_in_background) {
         std::thread([this, &t]() { compile(t); });
@@ -532,6 +543,7 @@ struct Generated {
 
     CudaModelSourceGen<BaseScalar> main_source_gen(*(main_trace.tape), name);
     main_source_gen.setCreateJacobian(true);
+    main_source_gen.global_input_dim() = global_input_dim_;
     CudaLibraryProcessor<BaseScalar> cuda_proc(&main_source_gen,
                                                name + "_cuda");
     // reverse order of invocation to first generate code for innermost
@@ -617,8 +629,8 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
 template <typename Scalar>
 inline void call_atomic(
     const std::string &name,
-    std::function<void(const std::vector<Scalar> &, std::vector<Scalar> &)>
-        functor,
+    const std::function<void(const std::vector<Scalar> &,
+                             std::vector<Scalar> &)> &functor,
     const std::vector<Scalar> &input, std::vector<Scalar> &output) {
   // no tracing occurs since the arguments are of type double
   functor(input, output);
@@ -632,7 +644,7 @@ template <typename BaseScalar>
 inline ADCG<BaseScalar> call_atomic(
     const std::string &name,
     const std::function<ADCG<BaseScalar>(const std::vector<ADCG<BaseScalar>> &)>
-        functor,
+        &functor,
     const std::vector<ADCG<BaseScalar>> &input) {
   ADFunctor<BaseScalar> vec_fun =
       [functor](const std::vector<ADCG<BaseScalar>> &in,
@@ -645,7 +657,7 @@ inline ADCG<BaseScalar> call_atomic(
 template <typename Scalar>
 inline Scalar call_atomic(
     const std::string &name,
-    const std::function<Scalar(const std::vector<Scalar> &)> functor,
+    const std::function<Scalar(const std::vector<Scalar> &)> &functor,
     const std::vector<Scalar> &input) {
   return functor(input);
 }
