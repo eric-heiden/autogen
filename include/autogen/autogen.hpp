@@ -277,15 +277,28 @@ struct Generated {
       conditionally_compile(compilation_input, outputs[0]);
     }
 
-    if (mode_ == GENERATE_NONE) {
-      // we may not assume the original function is thread-safe
-      std::vector<BaseScalar> input(global_input.size());
-      input.insert(input.begin(), global_input.begin(), global_input.end());
-      for (size_t i = 0; i < local_inputs.size(); ++i) {
-        for (size_t j = 0; j < local_inputs[i].size(); ++i) {
-          input[j + global_input.size()] = local_inputs[i][j];
+    if (mode_ == GENERATE_NONE || mode_ == GENERATE_CPPAD) {
+      if (global_input.empty()) {
+        for (size_t i = 0; i < local_inputs.size(); ++i) {
+          if (mode_ == GENERATE_NONE) {
+            (*f_double_)(local_inputs[i], outputs[i]);
+          } else {
+            outputs[i] = tape_->Forward(0, local_inputs[i]);
+          }
         }
-        (*f_double_)(input, outputs[i]);
+      } else {
+        std::vector<BaseScalar> input(global_input.size());
+        input.insert(input.begin(), global_input.begin(), global_input.end());
+        for (size_t i = 0; i < local_inputs.size(); ++i) {
+          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+            input[j + global_input.size()] = local_inputs[i][j];
+          }
+          if (mode_ == GENERATE_NONE) {
+            (*f_double_)(input, outputs[i]);
+          } else {
+            outputs[i] = tape_->Forward(0, input);
+          }
+        }
       }
     } else if (mode_ == GENERATE_CPU) {
 #if CPPAD_CG_SYSTEM_WIN
@@ -293,28 +306,34 @@ struct Generated {
       return;
 #else
       assert(!library_name_.empty());
+      for (auto &o : outputs) {
+        o.resize(output_dim_);
+      }
       int num_tasks = static_cast<int>(local_inputs.size());
 #pragma omp parallel for
       for (int i = 0; i < num_tasks; ++i) {
-        static thread_local std::vector<BaseScalar> input;
-        if (input.empty()) {
-          input.resize(global_input.size());
-          input.insert(input.begin(), global_input.begin(), global_input.end());
+        if (global_input.empty()) {
+          GenericModelPtr &model = get_cpu_model();
+          model->ForwardZero(local_inputs[i], outputs[i]);
+        } else {
+          static thread_local std::vector<BaseScalar> input;
+          if (input.empty()) {
+            input.resize(global_input.size());
+            input.insert(input.begin(), global_input.begin(),
+                         global_input.end());
+          }
+          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+            input[j + global_input.size()] = local_inputs[i][j];
+          }
+          GenericModelPtr &model = get_cpu_model();
+          model->ForwardZero(input, outputs[i]);
         }
-        for (size_t j = 0; j < local_inputs[i].size(); ++i) {
-          input[j + global_input.size()] = local_inputs[i][j];
-        }
-        GenericModelPtr &model = get_cpu_model();
-        model->ForwardZero(input, outputs[i]);
       }
 #endif
     } else if (mode_ == GENERATE_CUDA) {
       const auto &model = get_cuda_model();
       model.forward_zero(&outputs, local_inputs, num_gpu_threads_per_block,
                          global_input);
-    } else if (mode_ == GENERATE_CPPAD) {
-      throw std::runtime_error(
-          "CppAD vectorized forward call is not yet implemented.");
     }
   }
 
@@ -339,6 +358,11 @@ struct Generated {
         }
         left_x[i] = right_x[i] = input[i];
       }
+      return;
+    }
+    if (mode_ == GENERATE_CPPAD) {
+      output = tape_->Jacobian(input);
+      return;
     }
 
     if (!is_compiled()) {
@@ -354,14 +378,80 @@ struct Generated {
       return;
 #else
       assert(!library_name_.empty());
+      int num_tasks = static_cast<int>(local_inputs.size());
+#pragma omp parallel for
+      for (int i = 0; i < num_tasks; ++i) {
+        if (global_input.empty()) {
+          GenericModelPtr &model = get_cpu_model();
+          model->ForwardZero(local_inputs[i], outputs[i]);
+          model->Jacobian(local_inputs[i], outputs[i]);
+        } else {
+          static thread_local std::vector<BaseScalar> input;
+          if (input.empty()) {
+            input.resize(global_input.size());
+            input.insert(input.begin(), global_input.begin(),
+                         global_input.end());
+          }
+          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+            input[j + global_input.size()] = local_inputs[i][j];
+          }
+          GenericModelPtr &model = get_cpu_model();
+          model->Jacobian(input, outputs[i]);
+        }
+      }
+#endif
+    } else if (mode_ == GENERATE_CUDA) {
+      const auto &model = get_cuda_model();
+      model.jacobian(input, output);
+    }
+  }
+
+  void jacobian(const std::vector<std::vector<BaseScalar>> &local_inputs,
+                std::vector<std::vector<BaseScalar>> &outputs,
+                const std::vector<BaseScalar> &global_input = {}) {
+    // TODO conditionally compile? (need to know output dim)
+    outputs.resize(local_inputs.size());
+    if (mode_ == GENERATE_NONE || mode_ == GENERATE_CPPAD) {
+      if (global_input.empty()) {
+        for (size_t i = 0; i < local_inputs.size(); ++i) {
+          jacobian(local_inputs[i], outputs[i]);
+        }
+      } else {
+        std::vector<BaseScalar> input(global_input.size());
+        input.insert(input.begin(), global_input.begin(), global_input.end());
+        for (size_t i = 0; i < local_inputs.size(); ++i) {
+          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+            input[j + global_input.size()] = local_inputs[i][j];
+          }
+          jacobian(input, outputs[i]);
+        }
+      }
+      return;
+    }
+
+    if (!is_compiled()) {
+      throw std::runtime_error("The function \"" + name +
+                               "\" has not yet been compiled in " + str(mode_) +
+                               " mode. You need to call the forward pass first "
+                               "to trigger the compilation of the Jacobian.\n");
+    }
+
+    if (mode_ == GENERATE_CPU) {
+#if CPPAD_CG_SYSTEM_WIN
+      std::cerr << "CPU code generation is not yet available on Windows.\n";
+      return;
+#else
+      assert(!library_name_.empty());
+      for (auto &o : outputs) {
+        o.resize(output_dim_);
+      }
       GenericModelPtr &model = get_cpu_model();
       model->Jacobian(input, output);
 #endif
     } else if (mode_ == GENERATE_CUDA) {
       const auto &model = get_cuda_model();
-      model.jacobian(input, output);
-    } else if (mode_ == GENERATE_CPPAD) {
-      output = tape_->Jacobian(input);
+      model.jacobian(&outputs, local_inputs, num_gpu_threads_per_block,
+                     global_input);
     }
   }
 
@@ -390,7 +480,7 @@ struct Generated {
       output_dim_ = output.size();
       FunctionTrace<BaseScalar> t = trace(input, output);
       if (compile_in_background) {
-        std::thread([this, &t]() { compile(t); });
+        std::thread worker([this, &t]() { compile(t); });
         (*f_double_)(input, output);
         return;
       } else {
@@ -489,6 +579,7 @@ struct Generated {
     compiler->addCompileFlag("-O" + std::to_string(1));
     if (debug_mode) {
       compiler->addCompileFlag("-g");
+      compiler->addCompileFlag("-O0");
     }
     p.setLibraryName(name + "_cpu");
     p.createDynamicLibrary(*compiler, false);
