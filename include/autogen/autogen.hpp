@@ -378,27 +378,8 @@ struct Generated {
       return;
 #else
       assert(!library_name_.empty());
-      int num_tasks = static_cast<int>(local_inputs.size());
-#pragma omp parallel for
-      for (int i = 0; i < num_tasks; ++i) {
-        if (global_input.empty()) {
-          GenericModelPtr &model = get_cpu_model();
-          model->ForwardZero(local_inputs[i], outputs[i]);
-          model->Jacobian(local_inputs[i], outputs[i]);
-        } else {
-          static thread_local std::vector<BaseScalar> input;
-          if (input.empty()) {
-            input.resize(global_input.size());
-            input.insert(input.begin(), global_input.begin(),
-                         global_input.end());
-          }
-          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
-            input[j + global_input.size()] = local_inputs[i][j];
-          }
-          GenericModelPtr &model = get_cpu_model();
-          model->Jacobian(input, outputs[i]);
-        }
-      }
+      GenericModelPtr &model = get_cpu_model();
+      model->Jacobian(input, output);      
 #endif
     } else if (mode_ == GENERATE_CUDA) {
       const auto &model = get_cuda_model();
@@ -445,8 +426,27 @@ struct Generated {
       for (auto &o : outputs) {
         o.resize(output_dim_);
       }
-      GenericModelPtr &model = get_cpu_model();
-      model->Jacobian(input, output);
+      int num_tasks = static_cast<int>(local_inputs.size());
+#pragma omp parallel for
+      for (int i = 0; i < num_tasks; ++i) {
+        if (global_input.empty()) {
+          GenericModelPtr &model = get_cpu_model();
+          model->ForwardZero(local_inputs[i], outputs[i]);
+          model->Jacobian(local_inputs[i], outputs[i]);
+        } else {
+          static thread_local std::vector<BaseScalar> input;
+          if (input.empty()) {
+            input.resize(global_input.size());
+            input.insert(input.begin(), global_input.begin(),
+                         global_input.end());
+          }
+          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+            input[j + global_input.size()] = local_inputs[i][j];
+          }
+          GenericModelPtr &model = get_cpu_model();
+          model->Jacobian(input, outputs[i]);
+        }
+      }
 #endif
     } else if (mode_ == GENERATE_CUDA) {
       const auto &model = get_cuda_model();
