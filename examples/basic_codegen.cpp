@@ -1,5 +1,7 @@
 #include "autogen/autogen.hpp"
 
+const bool use_reverse_mode = true;
+
 template <typename Scalar>
 Scalar simple_c(const std::vector<Scalar> &input) {
   return cos(input[0] * input[1] * 5.0);
@@ -48,7 +50,8 @@ void print(const std::vector<std::vector<double>> &vs) {
 
 int main(int argc, char *argv[]) {
   int dim = 4;
-  std::vector<double> input(dim), output(dim);
+  int output_dim = use_reverse_mode ? 1 : 4;
+  std::vector<double> input(dim), output(output_dim);
   input = {0.84018771715470952, 0.39438292681909304, 0.78309922375860586,
            0.79844003347607329};
   std::cout << "\nInput:  ";

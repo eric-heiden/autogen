@@ -249,6 +249,12 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
   std::string forward_one_source(
       std::vector<std::pair<std::string, std::string>> &sources);
 
+  /**
+   * Generate CUDA library code for the reverse one pass.
+   */
+  std::string reverse_one_source(
+      std::vector<std::pair<std::string, std::string>> &sources);
+
  protected:
   void generateSparseForwardOneSourcesWithAtomics(
       const std::map<size_t, std::vector<size_t>> &elements,
@@ -258,10 +264,20 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
       const std::map<size_t, std::vector<size_t>> &elements,
       std::ostringstream &code,
       std::vector<std::pair<std::string, std::string>> &sources);
+
+  void generateSparseReverseOneSourcesWithAtomics(
+      const std::map<size_t, std::vector<size_t>> &elements,
+      std::ostringstream &code,
+      std::vector<std::pair<std::string, std::string>> &sources);
+  void generateSparseReverseOneSourcesNoAtomics(
+      const std::map<size_t, std::vector<size_t>> &elements,
+      std::ostringstream &code,
+      std::vector<std::pair<std::string, std::string>> &sources);
 };
 
 }  // namespace autogen
 
 #include "cuda_codegen_for0.hpp"
 #include "cuda_codegen_for1.hpp"
+#include "cuda_codegen_rev1.hpp"
 #include "cuda_codegen_jacobian.hpp"
