@@ -110,30 +110,27 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
       //                   << this->_ATOMIC_TY << ", " << this->_ATOMIC_TX
       //                   << ");\n";
 
-
-        // find the index in "idx" array
-      //OperationNode<Base> &array = *ty[p];
+      // find the index in "idx" array
+      // OperationNode<Base> &array = *ty[p];
       OperationNode<Base> &array = *tx[1];
       size_t nnz = array.getArguments().size();
-      //size_t size = array.getInfo()[0];
+      // size_t size = array.getInfo()[0];
       size_t id = this->getVariableID(array);
 
       const std::string &aName = this->createVariableName(array);
 
-      //this->_streamStack << this->_indentation << fun_name
+      // this->_streamStack << this->_indentation << fun_name
       //                   << "_sparse_forward_one("
       //                   << this->_C_SPARSE_INDEX_ARRAY << "[" << (id - 1)
       //                   << "], " << this->_ATOMIC_TY << ", "
-      //                   << this->_ATOMIC_TX << ", " << aName 
+      //                   << this->_ATOMIC_TX << ", " << aName
       //                   << ");\n";
 
-      this->_streamStack << this->_indentation << fun_name
-                         << "_forward_one("
-                         << this->_ATOMIC_TY << ", "
-                         << this->_ATOMIC_TX << ", "
+      this->_streamStack << this->_indentation << fun_name << "_forward_one("
+                         << this->_ATOMIC_TY << ", " << this->_ATOMIC_TX << ", "
                          << aName << ", " << nnz << ", "
-                         << "&" << this->_C_SPARSE_INDEX_ARRAY << "[" << (id - 1)
-                         << "]);\n";
+                         << "&" << this->_C_SPARSE_INDEX_ARRAY << "["
+                         << (id - 1) << "]);\n";
 
     } else {
       throw std::runtime_error(
@@ -141,7 +138,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
           " with p = " + std::to_string(p) + " and q = " + std::to_string(q) +
           ".");
     }
-    
+
     if (add_debug_prints) {
       this->_streamStack << this->_indentation << "printf(\"Called " << fun_name
                          << " (p = " << p << ", q = " << q << "):\\n\");\n";
@@ -169,74 +166,99 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
      */
     this->markArrayChanged(*ty[p]);
   }
-  //   virtual void pushAtomicReverseOp(Node &atomicRev) {
-  //     CPPADCG_ASSERT_KNOWN(
-  //         atomicRev.getInfo().size() == 2,
-  //         "Invalid number of information elements for atomic reverse
-  //         operation")
-  //     int p = atomicRev.getInfo()[1];
-  //     size_t p1 = p + 1;
-  //     const std::vector<Arg> &opArgs = atomicRev.getArguments();
-  //     CPPADCG_ASSERT_KNOWN(
-  //         opArgs.size() == p1 * 4,
-  //         "Invalid number of arguments for atomic reverse operation")
 
-  //     size_t id = atomicRev.getInfo()[0];
-  //     size_t atomicIndex = this->_info->atomicFunctionId2Index.at(id);
-  //     std::vector<Node *> tx(p1), px(p1), py(p1);
-  //     for (size_t k = 0; k < p1; k++) {
-  //       tx[k] = opArgs[0 * p1 + k].getOperation();
-  //       px[k] = opArgs[2 * p1 + k].getOperation();
-  //       py[k] = opArgs[3 * p1 + k].getOperation();
-  //     }
+  virtual void pushAtomicReverseOp(Node &atomicRev) {
+    using namespace CppAD::cg;
+    CPPADCG_ASSERT_KNOWN(
+        atomicRev.getInfo().size() == 2,
+        "Invalid number of information elements for atomic reverse operation")
+    int p = atomicRev.getInfo()[1];
+    size_t p1 = p + 1;
+    const std::vector<Arg> &opArgs = atomicRev.getArguments();
+    CPPADCG_ASSERT_KNOWN(
+        opArgs.size() == p1 * 4,
+        "Invalid number of arguments for atomic reverse operation")
 
-  //     CPPADCG_ASSERT_KNOWN(tx[0]->getOperationType() ==
-  //     CGOpCode::ArrayCreation,
-  //                          "Invalid array type")
-  //     CPPADCG_ASSERT_KNOWN(p == 0 || tx[1]->getOperationType() ==
-  //                                        CGOpCode::SparseArrayCreation,
-  //                          "Invalid array type")
+    size_t id = atomicRev.getInfo()[0];
+    size_t atomicIndex = this->_info->atomicFunctionId2Index.at(id);
+    std::vector<Node *> tx(p1), px(p1), py(p1);
+    for (size_t k = 0; k < p1; k++) {
+      tx[k] = opArgs[0 * p1 + k].getOperation();
+      px[k] = opArgs[2 * p1 + k].getOperation();
+      py[k] = opArgs[3 * p1 + k].getOperation();
+    }
+    const std::string &fun_name = this->_info->atomicFunctionId2Name.at(id);
 
-  //     CPPADCG_ASSERT_KNOWN(px[0]->getOperationType() ==
-  //     CGOpCode::ArrayCreation,
-  //                          "Invalid array type")
+    CPPADCG_ASSERT_KNOWN(tx[0]->getOperationType() == CGOpCode::ArrayCreation,
+                         "Invalid array type")
+    CPPADCG_ASSERT_KNOWN(
+        p == 0 || tx[1]->getOperationType() == CGOpCode::SparseArrayCreation,
+        "Invalid array type")
 
-  //     CPPADCG_ASSERT_KNOWN(py[0]->getOperationType() ==
-  //                              CGOpCode::SparseArrayCreation,
-  //                          "Invalid array type")
-  //     CPPADCG_ASSERT_KNOWN(p == 0 || py[1]->getOperationType() ==
-  //                                        CGOpCode::ArrayCreation,
-  //                          "Invalid array type")
+    CPPADCG_ASSERT_KNOWN(px[0]->getOperationType() == CGOpCode::ArrayCreation,
+                         "Invalid array type")
 
-  //     // tx
-  //     for (size_t k = 0; k < p1; k++) {
-  //       printArrayStructInit(this->_ATOMIC_TX, k, tx, k); // also does
-  //       indentation
-  //     }
-  //     // py
-  //     for (size_t k = 0; k < p1; k++) {
-  //       printArrayStructInit(this->_ATOMIC_PY, k, py, k); // also does
-  //       indentation
-  //     }
-  //     // px
-  //     printArrayStructInit(this->_ATOMIC_PX, *px[0]); // also does
-  //     indentation _ss.str("");
+    CPPADCG_ASSERT_KNOWN(
+        py[0]->getOperationType() == CGOpCode::SparseArrayCreation,
+        "Invalid array type")
+    CPPADCG_ASSERT_KNOWN(
+        p == 0 || py[1]->getOperationType() == CGOpCode::ArrayCreation,
+        "Invalid array type")
 
-  //     this->_streamStack << this->_indentation <<
-  //     "atomicFun.reverse(atomicFun.libModel, "
-  //                  << atomicIndex << ", " << p << ", " << this->_ATOMIC_TX
-  //                  <<
-  //                  ", &"
-  //                  << this->_ATOMIC_PX << ", " << this->_ATOMIC_PY << ");
-  //                  //
-  //                  "
-  //                  << this->_info->atomicFunctionId2Name.at(id) << "\n";
+    // // tx
+    // for (size_t k = 0; k < p1; k++) {
+    //   printArrayStructInit(this->_ATOMIC_TX, k, tx,
+    //                        k);  // also does indentation
+    // }
+    // // py
+    // for (size_t k = 0; k < p1; k++) {
+    //   printArrayStructInit(this->_ATOMIC_PY, k, py,
+    //                        k);  // also does indentation
+    // }
+    // // px
+    // printArrayStructInit(this->_ATOMIC_PX, *px[0]);  // also does indentation
+    this->_ss.str("");
 
-  //     /**
-  //      * the values of px are now changed
-  //      */
-  //     markArrayChanged(*px[0]);
-  //   }
+    for (size_t k = 0; k < p1; k++) {
+      this->_streamStack << this->_indentation << this->_ATOMIC_TX << " = "
+                         << this->createVariableName(*tx[k]) << ";\n";
+    }
+
+    for (size_t k = 0; k < p1; k++) {
+      this->_streamStack << this->_indentation << this->_ATOMIC_PY << " = "
+                         << this->createVariableName(*py[k]) << ";\n";
+    }
+    this->_streamStack << this->_indentation << this->_ATOMIC_PX << " = "
+                       << this->createVariableName(*px[0]) << ";\n";
+
+    // this->_streamStack << this->_indentation
+    //                    << "atomicFun.reverse(atomicFun.libModel, "
+    //                    << atomicIndex << ", " << p << ", " <<
+    //                    this->_ATOMIC_TX
+    //                    << ", &" << this->_ATOMIC_PX << ", " <<
+    //                    this->_ATOMIC_PY
+    //                    << "); //" <<
+    //                    this->_info->atomicFunctionId2Name.at(id)
+    //                    << "\n";
+
+    OperationNode<Base> &array = *py[0];
+    size_t nnz = array.getArguments().size();
+    // // size_t size = array.getInfo()[0];
+    size_t arr_id = this->getVariableID(array);
+
+    // const std::string &aName = this->createVariableName(array);
+
+    this->_streamStack << this->_indentation << fun_name << "_reverse_one("
+                       << this->_ATOMIC_PX << ", " << this->_ATOMIC_TX << ", "
+                       << this->_ATOMIC_PY << ", "  << nnz
+                       << ", &" << this->_C_SPARSE_INDEX_ARRAY << "["
+                       << (arr_id - 1) << "]);\n";
+
+    /**
+     * the values of px are now changed
+     */
+    this->markArrayChanged(*px[0]);
+  }
 
   CppAD::cg::VariableNameGenerator<Base> *getNameGen() {
     return this->_nameGen;

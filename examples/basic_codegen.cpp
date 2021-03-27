@@ -1,18 +1,21 @@
 #include "autogen/autogen.hpp"
 
+constexpr double PI = 3.1415926535;
+constexpr double PI_2 = PI / 2.0;
+
 const bool use_reverse_mode = true;
 
 template <typename Scalar>
 Scalar simple_c(const std::vector<Scalar> &input) {
-  return cos(input[0] * input[1] * 5.0);
+  return cos(input[0] * input[1] * 5.23587172);
 }
 
 template <typename Scalar>
 void simple_b(const std::vector<Scalar> &input, std::vector<Scalar> &output) {
   std::vector<Scalar> temp(3);
-  temp[0] = sin(input[0] * 2.0 + 0.7) * 5.0 * input[1] * input[2];
-  temp[1] = input[1] * input[2];
-  temp[2] = input[1] * input[2] * input[2] * input[2];
+  temp[0] = sin(input[0] * PI + 0.7) * PI_2 * input[1] * input[2];
+  temp[1] = input[1] * (input[2] + PI_2) * PI;
+  temp[2] = input[1] * input[2] * input[2] * input[2] * PI;
   // note we use a special `call_atomic` overload for scalar-valued functions
   std::function functor = &simple_c<Scalar>;
   output[0] = temp[0] + autogen::call_atomic("cosine", functor, temp);
@@ -50,7 +53,7 @@ void print(const std::vector<std::vector<double>> &vs) {
 
 int main(int argc, char *argv[]) {
   int dim = 4;
-  int output_dim = use_reverse_mode ? 1 : 4;
+  int output_dim = use_reverse_mode ? 2 : 4;
   std::vector<double> input(dim), output(output_dim);
   input = {0.84018771715470952, 0.39438292681909304, 0.78309922375860586,
            0.79844003347607329};

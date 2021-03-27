@@ -19,7 +19,8 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesWithAtomics(
    * Generate one function for each dependent variable
    */
   const std::string jobName = "model (reverse one)";
-  this->startingJob("'" + jobName + "'", CppAD::cg::JobTimer::SOURCE_GENERATION);
+  this->startingJob("'" + jobName + "'",
+                    CppAD::cg::JobTimer::SOURCE_GENERATION);
 
   for (const auto& it : elements) {
     size_t i = it.first;
@@ -56,9 +57,9 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesWithAtomics(
     CPPADCG_ASSERT_UNKNOWN(dw.size() == n);
     w[i] = Base(0);
 
-    vector<CGBase> dyCustom;
+    vector<CGBase> dwCustom;
     for (size_t it2 : cols) {
-      dyCustom.push_back(dw[it2]);
+      dwCustom.push_back(dw[it2]);
     }
 
     this->finishedJob();
@@ -76,18 +77,18 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesWithAtomics(
     langC.setGenerateFunction("");
 
     // CudaVariableNameGenerator<Base> nameGen(global_input_dim_);
-    // handler.generateCode(fun_body, langC, dyCustom, nameGen,
+    // handler.generateCode(fun_body, langC, dwCustom, nameGen,
     //                      this->_atomicFunctions, subJobName);
 
     std::unique_ptr<CppAD::cg::VariableNameGenerator<Base>> nameGen(
-        this->createVariableNameGenerator("dy"));
+        this->createVariableNameGenerator("dw"));
     CppAD::cg::LangCDefaultHessianVarNameGenerator<Base> nameGenHess(
-        nameGen.get(), "dx", n);
-    handler.generateCode(fun_body, langC, dyCustom, nameGenHess,
+        nameGen.get(), "py", n);
+    handler.generateCode(fun_body, langC, dwCustom, nameGenHess,
                          this->_atomicFunctions, subJobName);
 
     std::string fun_name = std::string(this->_name) +
-                           "_sparse_reverse_one_indep" + std::to_string(i);
+                           "_sparse_reverse_one_dep" + std::to_string(i);
     CudaFunctionSourceGen generator(fun_name, local_input_dim(),
                                     global_input_dim_, output_dim(),
                                     CUDA_ACCUMULATE_NONE);
@@ -125,7 +126,8 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesNoAtomics(
   /**
    * Jacobian
    */
-  size_t n = this->_fun.Domain();
+  size_t m = _fun.Range();
+  size_t n = _fun.Domain();
 
   CppAD::cg::CodeHandler<Base> handler;
   handler.setJobTimer(this->_jobTimer);
@@ -138,57 +140,56 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesNoAtomics(
     }
   }
 
-  CGBase dx;
-  handler.makeVariable(dx);
-  if (this->_x.size() > 0) {
-    dx.setValue(Base(1.0));
+  CGBase py;
+  handler.makeVariable(py);
+  if (_x.size() > 0) {
+    py.setValue(Base(1.0));
   }
 
-  vector<CGBase> jacFlat(this->_jacSparsity.rows.size());
+  vector<CGBase> jacFlat(_jacSparsity.rows.size());
 
   CppAD::sparse_jacobian_work work;  // temporary structure for CPPAD
-  this->_fun.SparseJacobianreverse(x, this->_jacSparsity.sparsity,
-                                   this->_jacSparsity.rows,
-                                   this->_jacSparsity.cols, jacFlat, work);
+  _fun.SparseJacobianReverse(x, _jacSparsity.sparsity, _jacSparsity.rows,
+                             _jacSparsity.cols, jacFlat, work);
 
   /**
    * organize results
    */
-  std::map<size_t, vector<CGBase>> jac;                  // by column
-  std::map<size_t, std::map<size_t, size_t>> positions;  // by column
+  std::map<size_t, vector<CGBase>> jac;                // by row
+  std::vector<std::map<size_t, size_t>> positions(m);  // by row
 
   for (const auto& it : elements) {
-    size_t j = it.first;
-    const std::vector<size_t>& column = it.second;
+    size_t i = it.first;
+    const std::vector<size_t>& row = it.second;
 
-    jac[j].resize(column.size());
-    std::map<size_t, size_t>& pos = positions[j];
+    jac[i].resize(row.size());
+    std::map<size_t, size_t>& pos = positions[i];
 
-    for (size_t e = 0; e < column.size(); e++) {
-      size_t i = column[e];
-      pos[i] = e;
+    for (size_t e = 0; e < row.size(); e++) {
+      size_t j = row[e];
+      pos[j] = e;
     }
   }
 
-  for (size_t el = 0; el < this->_jacSparsity.rows.size(); el++) {
-    size_t i = this->_jacSparsity.rows[el];
-    size_t j = this->_jacSparsity.cols[el];
-    size_t e = positions[j].at(i);
+  for (size_t el = 0; el < _jacSparsity.rows.size(); el++) {
+    size_t i = _jacSparsity.rows[el];
+    size_t j = _jacSparsity.cols[el];
+    size_t e = positions[i].at(j);
 
-    vector<CGBase>& column = jac[j];
-    column[e] = jacFlat[el] * dx;
+    vector<CGBase>& row = jac[i];
+    row[e] = jacFlat[el] * py;
   }
 
   /**
-   * Create source for each independent/column
+   * Create source for each equation/row
    */
-  typename std::map<size_t, vector<CGBase>>::iterator itJ;
-  for (itJ = jac.begin(); itJ != jac.end(); ++itJ) {
-    size_t j = itJ->first;
-    vector<CGBase>& dyCustom = itJ->second;
+  typename std::map<size_t, vector<CGBase>>::iterator itI;
+  for (itI = jac.begin(); itI != jac.end(); ++itI) {
+    size_t i = itI->first;
+    vector<CGBase>& dwCustom = itI->second;
 
     this->_cache.str("");
-    this->_cache << "model (reverse one, indep " << j << ")";
+    this->_cache << "model (reverse one, dep " << i << ")";
     const std::string subJobName = this->_cache.str();
 
     std::ostringstream fun_body;
@@ -203,20 +204,20 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesNoAtomics(
     langC.setGenerateFunction("");  // this->_cache.str());
 
     // CudaVariableNameGenerator<Base> nameGen(global_input_dim_);
-    // handler.generateCode(fun_body, langC, dyCustom, nameGen,
+    // handler.generateCode(fun_body, langC, dwCustom, nameGen,
     //                      this->_atomicFunctions, subJobName);
 
     std::unique_ptr<CppAD::cg::VariableNameGenerator<Base>> nameGen(
-        this->createVariableNameGenerator("dy"));
+        this->createVariableNameGenerator("dw"));
     CppAD::cg::LangCDefaultHessianVarNameGenerator<Base> nameGenHess(
-        nameGen.get(), "dx", n);
-    handler.generateCode(fun_body, langC, dyCustom, nameGenHess,
+        nameGen.get(), "py", n);
+    handler.generateCode(fun_body, langC, dwCustom, nameGenHess,
                          this->_atomicFunctions, subJobName);
 
     // std::cout << code.str() << std::endl;
 
     std::string fun_name = std::string(this->_name) +
-                           "_sparse_reverse_one_indep" + std::to_string(j);
+                           "_sparse_reverse_one_dep" + std::to_string(i);
     CudaFunctionSourceGen generator(fun_name, local_input_dim(),
                                     global_input_dim_, output_dim(),
                                     CUDA_ACCUMULATE_NONE);
@@ -251,7 +252,8 @@ std::string directional_reverse_function_source(
   code << fun_title << "unsigned long pos,\n";
   code << std::string(fun_title.size(), ' ') << "Float* out,\n";
   code << std::string(fun_title.size(), ' ') << "const Float* x,\n";
-  code << std::string(fun_title.size(), ' ') << "const Float* dx) {\n";
+  // code << std::string(fun_title.size(), ' ') << "const Float* ty,\n";
+  code << std::string(fun_title.size(), ' ') << "const Float* py) {\n";
   // code << "  Float compressed[" << input_dim << "];\n";
   // code << "  unsigned long const* idx;\n";
   // code << "  unsigned long nnz;\n\n";
@@ -262,10 +264,10 @@ std::string directional_reverse_function_source(
     code << "    case " << it.first
          << ":\n"
             "      "
-         << function << "_sparse_reverse_one_indep"
+         << function << "_sparse_reverse_one_dep"
          << it.first
          //<< "(compressed, x, dx);\n"
-         << "(out, x, dx);\n"
+         << "(out, x, py);\n"
             "      return 0;\n";
   }
   code
@@ -326,7 +328,7 @@ std::string CudaModelSourceGen<Base>::reverse_one_source(
   // elements[var]{equations}
   std::map<size_t, std::vector<size_t>> elements;
   for (size_t e = 0; e < this->_jacSparsity.rows.size(); e++) {
-    elements[this->_jacSparsity.cols[e]].push_back(this->_jacSparsity.rows[e]);
+    elements[this->_jacSparsity.rows[e]].push_back(this->_jacSparsity.cols[e]);
   }
 
   std::cout << this->_name << " uses atomics? " << std::boolalpha
@@ -349,7 +351,7 @@ std::string CudaModelSourceGen<Base>::reverse_one_source(
   code << "\n__device__\n" << this->_cache.str() << "\n";
 
   code << directional_reverse_function_source(this->_name, elements,
-                                      this->_fun.Domain());
+                                              this->_fun.Domain());
 
   size_t m = this->_fun.Range();
   size_t n = this->_fun.Domain();
@@ -363,14 +365,14 @@ std::string CudaModelSourceGen<Base>::reverse_one_source(
   code << "\n__device__\n";
   LanguageCuda<Base>::printFunctionDeclaration(
       code, "int", model_function,
-      {"Float *out", "const Float *x", "const Float *dx", "unsigned long nnzTx",
+      {"Float *out", "const Float *x", "const Float *py", "unsigned long nnzTx",
        "const unsigned long *idx"});
   code << " {\n"
        << "  unsigned long ePos, ej, j, nnz;\n"
        << "  int ret;\n"
        << "  unsigned long const* pos;\n"
-       << "  Float compressed[" << m << "];\n"
-       << "  const Float *dx_in;\n\n";
+       << "  Float compressed[" << n << "];\n"
+       << "  const Float *py_in;\n\n";
 
   if (LanguageCuda<Base>::add_debug_prints) {
     code << "  printf(\"" << model_function
@@ -382,9 +384,9 @@ std::string CudaModelSourceGen<Base>::reverse_one_source(
        << "    j = idx[ej];\n"
        << "    " << sparsity_function << "(j, &pos, &nnz);\n"
        << "    if (nnz == 0) continue;\n"
-       << "    dx_in = &dx[ej];\n"
+       << "    py_in = &py[ej];\n"
        << "    ret = " << sparse_rev1_function
-       << "(j, compressed, x, dx_in);\n\n"
+       << "(j, compressed, x, py_in);\n\n"
        << "    if (ret != 0) return ret;\n"
        << "    for (ePos = 0; ePos < nnz; ePos++) {\n"
        << "      if (ej == 0) out[pos[ePos]] = 0;\n"

@@ -558,6 +558,7 @@ struct Generated {
       // source_gen->setCreateSparseJacobian(true);
       // source_gen->setCreateJacobian(true);
       source_gen->setCreateForwardOne(true);
+      source_gen->setCreateReverseOne(true);
       models.push_back(source_gen);
       // we need a stable reference
       libcgen.addModel(*(models.back()));
@@ -646,6 +647,7 @@ struct Generated {
       FunctionTrace<BaseScalar> &trace = CodeGenData<BaseScalar>::traces[*it];
       auto *source_gen = new CudaModelSourceGen<BaseScalar>(*(trace.tape), *it);
       source_gen->setCreateForwardOne(true);
+      source_gen->setCreateReverseOne(true);
       source_gen->set_kernel_only(true);
       models.push_back(source_gen);
       cuda_proc.add_model(models.back(), false);

@@ -154,6 +154,13 @@ class CudaLibraryProcessor {
         sources_.push_back(std::make_pair(src_name, source));
         gen_srcs_.push_back(src_name);
       }
+      if (cgen->isCreateReverseOne()) {
+        std::string src_name = cgen->getName() + "_reverse_one." + extension;
+        // generate CUDA code
+        std::string source = cgen->reverse_one_source(sources_);
+        sources_.push_back(std::make_pair(src_name, source));
+        gen_srcs_.push_back(src_name);
+      }
       if (cgen->isCreateJacobian()) {
         std::string src_name = cgen->getName() + "_jacobian." + extension;
         // generate CUDA code
@@ -213,9 +220,9 @@ class CudaLibraryProcessor {
     cmd << "\"" << nvcc_path_ << "\" ";
     cmd << "--ptxas-options=-O" << std::to_string(optimization_level_) << ",-v "
         << "-rdc=true ";
-    if (debug_mode_) {
-      cmd << "-G ";
-    }
+    // if (debug_mode_) {
+    //   cmd << "-G ";
+    // }
 #if CPPAD_CG_SYSTEM_WIN
     cmd << "-o " << library_name_ << ".dll "
 #else
