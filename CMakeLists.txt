@@ -60,7 +60,7 @@ INTERFACE
 )
 
 add_library(autogen INTERFACE)
-target_include_directories(autogen INTERFACE include)
+target_include_directories(autogen INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)
 target_link_libraries(autogen INTERFACE ${CMAKE_DL_LIBS} CppADCodeGen Threads::Threads)
 if (Eigen_FOUND)
   target_link_libraries(autogen INTERFACE Eigen3::Eigen3)
