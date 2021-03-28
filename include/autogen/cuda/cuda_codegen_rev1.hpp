@@ -126,8 +126,8 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesNoAtomics(
   /**
    * Jacobian
    */
-  size_t m = _fun.Range();
-  size_t n = _fun.Domain();
+  size_t m = this->_fun.Range();
+  size_t n = this->_fun.Domain();
 
   CppAD::cg::CodeHandler<Base> handler;
   handler.setJobTimer(this->_jobTimer);
@@ -142,15 +142,15 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesNoAtomics(
 
   CGBase py;
   handler.makeVariable(py);
-  if (_x.size() > 0) {
+  if (this->_x.size() > 0) {
     py.setValue(Base(1.0));
   }
 
-  vector<CGBase> jacFlat(_jacSparsity.rows.size());
+  vector<CGBase> jacFlat(this->_jacSparsity.rows.size());
 
   CppAD::sparse_jacobian_work work;  // temporary structure for CPPAD
-  _fun.SparseJacobianReverse(x, _jacSparsity.sparsity, _jacSparsity.rows,
-                             _jacSparsity.cols, jacFlat, work);
+  this->_fun.SparseJacobianReverse(x, this->_jacSparsity.sparsity, this->_jacSparsity.rows,
+                             this->_jacSparsity.cols, jacFlat, work);
 
   /**
    * organize results
@@ -171,9 +171,9 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesNoAtomics(
     }
   }
 
-  for (size_t el = 0; el < _jacSparsity.rows.size(); el++) {
-    size_t i = _jacSparsity.rows[el];
-    size_t j = _jacSparsity.cols[el];
+  for (size_t el = 0; el < this->_jacSparsity.rows.size(); el++) {
+    size_t i = this->_jacSparsity.rows[el];
+    size_t j = this->_jacSparsity.cols[el];
     size_t e = positions[i].at(j);
 
     vector<CGBase>& row = jac[i];
