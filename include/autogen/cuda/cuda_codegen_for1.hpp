@@ -81,6 +81,7 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesWithAtomics(
         nameGen.get(), "dx", n);
     handler.generateCode(fun_body, langC, dyCustom, nameGenHess,
                          this->_atomicFunctions, subJobName);
+    langC.print_constants(fun_body);
 
     std::string fun_name = std::string(this->_name) +
                            "_sparse_forward_one_indep" + std::to_string(j);
@@ -208,6 +209,7 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesNoAtomics(
         nameGen.get(), "dx", n);
     handler.generateCode(fun_body, langC, dyCustom, nameGenHess,
                          this->_atomicFunctions, subJobName);
+    langC.print_constants(fun_body);
 
     // std::cout << code.str() << std::endl;
 
@@ -345,7 +347,7 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
   code << "\n__device__\n" << this->_cache.str() << "\n";
 
   code << directional_forward_function_source(this->_name, elements,
-                                      this->_fun.Domain());
+                                              this->_fun.Domain());
 
   size_t m = this->_fun.Range();
   size_t n = this->_fun.Domain();
@@ -359,8 +361,8 @@ std::string CudaModelSourceGen<Base>::forward_one_source(
   code << "\n__device__\n";
   LanguageCuda<Base>::printFunctionDeclaration(
       code, "int", model_function,
-      {"Float *out", "const Float *x", "const Float *dx",
-       "unsigned long nnzTx", "const unsigned long *idx"});
+      {"Float *out", "const Float *x", "const Float *dx", "unsigned long nnzTx",
+       "const unsigned long *idx"});
   code << " {\n"
        << "  unsigned long ePos, ej, j, nnz;\n"
        << "  int ret;\n"

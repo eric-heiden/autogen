@@ -60,6 +60,7 @@ std::string CudaModelSourceGen<Base>::forward_zero_source() {
 
   handler.generateCode(code, langC, dep, nameGen, this->_atomicFunctions,
                        jobName);
+  langC.print_constants(code);
 
   std::size_t temporary_dim = nameGen.getMaxTemporaryVariableID() + 1 -
                               nameGen.getMinTemporaryVariableID();

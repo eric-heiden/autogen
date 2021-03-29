@@ -148,10 +148,12 @@ struct CudaFunctionSourceGen {
     code << "\n";
 
     std::string body_str = body.str();
-    size_t consts = replace_constants(body_str);
-    if (consts > 0) {
-      std::cout << "Introduced " << consts << " constant variable[s].\n";
-    }
+
+    std::cout << "Replacing variables in function " << function_name << "...\n";
+    // size_t consts = replace_constants(body_str);
+    // if (consts > 0) {
+    //   std::cout << "Introduced " << consts << " constant variable[s].\n";
+    // }
     code << body_str;
 
     if (LanguageCuda<Base>::add_debug_prints) {
@@ -349,20 +351,23 @@ struct CudaFunctionSourceGen {
     for (const auto &[value, count] : counts) {
       if (count > 1) {
         std::string varname = "c" + std::to_string(const_id++);
-        std::basic_regex value_regex("[\\W](" + value + ")[\\W;]");
-        bool match_found = true;
-        while (match_found) {
-          begin = code.cbegin();
-          end = code.cend();
-          match_found = std::regex_search(begin, end, res, value_regex);
-          if (match_found) {
-            code = code.replace(res[1].first, res[1].second, varname);
-          }
-        }
+        std::basic_regex value_regex("([\\W])(" + value + ")([\\W;])");
+        code = std::regex_replace(code, value_regex, "$1" + varname + "$2");
+        // bool match_found = true;
+        // while (match_found) {
+        //   begin = code.cbegin();
+        //   end = code.cend();
+        //   match_found = std::regex_search(begin, end, res, value_regex);
+        //   if (match_found) {
+        //     code = code.replace(res[1].first, res[1].second, varname);
+        //     begin = std::advacecode.cbegin() + res[1].first;
+        //   }
+        // }
         ss << "  static const Float " << varname << " = " << value << ";\n";
       }
     }
     ss << code;
+    std::cout << "Replaced " << const_id << " constant(s).\n";
     code = ss.str();
     return const_id;
   }

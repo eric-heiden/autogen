@@ -167,6 +167,7 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
 
     handler.generateCode(code, langC, jac, nameGen, this->_atomicFunctions,
                          jobName);
+    langC.print_constants(code);
 
     std::size_t temporary_dim = nameGen.getMaxTemporaryVariableID() + 1 -
                                 nameGen.getMinTemporaryVariableID();
@@ -279,5 +280,5 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
 
 #include "cuda_codegen_for0.hpp"
 #include "cuda_codegen_for1.hpp"
-#include "cuda_codegen_rev1.hpp"
 #include "cuda_codegen_jacobian.hpp"
+#include "cuda_codegen_rev1.hpp"
