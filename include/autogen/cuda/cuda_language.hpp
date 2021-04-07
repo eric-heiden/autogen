@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cppad/cg.hpp>
+#include <unordered_map>
 
 #include "cuda_variable_name_gen.hpp"
 
@@ -22,6 +23,9 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
   using LanguageC::isSameArgument;
 
   bool assume_cuda_namegen{true};
+
+  // maps constants to their variable names
+  std::unordered_map<std::string, std::string> constants_;
 
  public:
   LanguageCuda(bool assume_cuda_namegen = true, size_t spaces = 2)
@@ -250,9 +254,9 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
 
     this->_streamStack << this->_indentation << fun_name << "_reverse_one("
                        << this->_ATOMIC_PX << ", " << this->_ATOMIC_TX << ", "
-                       << this->_ATOMIC_PY << ", "  << nnz
-                       << ", &" << this->_C_SPARSE_INDEX_ARRAY << "["
-                       << (arr_id - 1) << "]);\n";
+                       << this->_ATOMIC_PY << ", " << nnz << ", &"
+                       << this->_C_SPARSE_INDEX_ARRAY << "[" << (arr_id - 1)
+                       << "]);\n";
 
     /**
      * the values of px are now changed
@@ -534,6 +538,30 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     //                   << "printf(\"\\n\");\n";
 
     return i;
+  }
+
+  void pushParameter(const Base &value) override {
+    std::ostringstream os;
+    os << std::setprecision(this->_parameterPrecision) << value;
+    std::string number = os.str();
+
+    if (constants_.find(number) == constants_.end()) {
+      constants_[number] = "c" + std::to_string(constants_.size());
+    }
+
+    this->_streamStack << constants_[number];
+  }
+
+  void print_constants(std::ostringstream &stream) const {
+    if (constants_.empty()) {
+      return;
+    }
+    std::string tmp = stream.str();
+    stream.str("");
+    for (const auto &[value, var] : constants_) {
+      stream << "  static const Float " << var << " = " << value << ";\n";
+    }
+    stream << tmp;
   }
 };
 }  // namespace autogen

@@ -51,6 +51,8 @@ std::string CudaModelSourceGen<Base>::jacobian_source() {
   handler.generateCode(code, langC, jac, nameGen, this->_atomicFunctions,
                        jobName);
 
+  langC.print_constants(code);
+
   std::size_t temporary_dim = nameGen.getMaxTemporaryVariableID() + 1 -
                               nameGen.getMinTemporaryVariableID();
   if (temporary_dim == 0) {

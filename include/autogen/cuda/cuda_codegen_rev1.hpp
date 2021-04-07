@@ -86,6 +86,7 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesWithAtomics(
         nameGen.get(), "py", n);
     handler.generateCode(fun_body, langC, dwCustom, nameGenHess,
                          this->_atomicFunctions, subJobName);
+    langC.print_constants(fun_body);
 
     std::string fun_name = std::string(this->_name) +
                            "_sparse_reverse_one_dep" + std::to_string(i);
@@ -149,8 +150,9 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesNoAtomics(
   vector<CGBase> jacFlat(this->_jacSparsity.rows.size());
 
   CppAD::sparse_jacobian_work work;  // temporary structure for CPPAD
-  this->_fun.SparseJacobianReverse(x, this->_jacSparsity.sparsity, this->_jacSparsity.rows,
-                             this->_jacSparsity.cols, jacFlat, work);
+  this->_fun.SparseJacobianReverse(x, this->_jacSparsity.sparsity,
+                                   this->_jacSparsity.rows,
+                                   this->_jacSparsity.cols, jacFlat, work);
 
   /**
    * organize results
@@ -213,6 +215,7 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesNoAtomics(
         nameGen.get(), "py", n);
     handler.generateCode(fun_body, langC, dwCustom, nameGenHess,
                          this->_atomicFunctions, subJobName);
+    langC.print_constants(fun_body);
 
     // std::cout << code.str() << std::endl;
 
