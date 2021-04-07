@@ -7,6 +7,7 @@
 #endif
 
 // clang-format off
+#include "utils/conditionals.hpp"
 #include "cuda/cuda_codegen.hpp"
 #include "cuda/cuda_library_processor.hpp"
 #include "cuda/cuda_library.hpp"
@@ -180,20 +181,33 @@ struct Generated {
     f_cg_ = std::make_unique<Functor<CGScalar>>(std::forward<Args>(args)...);
   }
 
+  // discards the compiled library (so that it gets recompiled at the next
+  // evaluation)
+  void discard_library() {
+    std::lock_guard<std::mutex> guard(compilation_mutex_);
+    library_name_ = "";
+  }
+
   GenerationMode mode() const { return mode_; }
   void set_mode(GenerationMode mode) {
     if (mode != this->mode_) {
       // changing the mode discards the previously compiled library
-      std::lock_guard<std::mutex> guard(compilation_mutex_);
-      library_name_ = "";
+      discard_library();
     }
     this->mode_ = mode;
   }
 
   size_t input_dim() const { return local_input_dim_ + global_input_dim_; }
   size_t local_input_dim() const { return local_input_dim_; }
-  size_t global_input_dim() const { return global_input_dim_; }
   size_t output_dim() const { return output_dim_; }
+
+  size_t global_input_dim() const { return global_input_dim_; }
+  void set_global_input_dim(size_t global_input_dim) {
+    if (global_input_dim != global_input_dim_) {
+      discard_library();
+    }
+    global_input_dim_ = global_input_dim;
+  }
 
   bool is_compiled() const {
     std::lock_guard<std::mutex> guard(compilation_mutex_);
