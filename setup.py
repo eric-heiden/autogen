@@ -56,8 +56,8 @@ class CMakeBuild(build_ext):
             # Users can override the generator with CMAKE_GENERATOR in CMake
             # 3.15+.
             if not cmake_generator:
-                cmake_args += ["-GNinja"]
-
+                # cmake_args += ["-GNinja"]
+                pass
         else:
 
             # Single config generators are handled "normally"

@@ -1,5 +1,8 @@
+#include <pybind11/functional.h>
 #include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <pybind11/stl_bind.h>
 
 #include "autogen/autogen.hpp"
 
@@ -8,7 +11,10 @@
 
 namespace py = pybind11;
 using CppADScalar = typename CppAD::AD<double>;
-using ADVector = std::vector<CppAD::AD<double>>;
+using ADVector = std::vector<CppADScalar>;
+
+PYBIND11_MAKE_OPAQUE(std::vector<double>);
+PYBIND11_MAKE_OPAQUE(ADVector);
 
 PYBIND11_MODULE(autogen_python, m) {
   m.doc() = R"pbdoc(
@@ -21,8 +27,15 @@ PYBIND11_MODULE(autogen_python, m) {
            :toctree: _generate
     )pbdoc";
 
+  py::bind_vector<std::vector<double>>(m, "DoubleVector");
+  py::bind_vector<ADVector>(m, "ADVector");
+
   py::class_<CppADScalar>(m, "CppADScalar")
-      .def(py::init<double>())
+      .def(py::init([](double t) {
+        //            return std::shared_ptr<CppADScalar>(new CppADScalar(t));
+        return new CppADScalar(t);
+      }))
+      .def(py::init())
       .def(-py::self)
       .def(py::self + py::self)
       .def(py::self - py::self)
@@ -42,8 +55,9 @@ PYBIND11_MODULE(autogen_python, m) {
       .def(py::self /= py::self)
       .def(py::self == py::self)
       .def(py::self != py::self)
-      .def("__pow__",
-           [](CppADScalar& s, int exponent) { return CppAD::pow(s, exponent); })
+      //      .def("__pow__",
+      //           [](CppADScalar* s, int exponent) {
+      //             return &CppAD::pow(*s,exponent); })
       .def("abs", &CppADScalar::abs_me)
       .def("acos", &CppADScalar::acos_me)
       .def("asin", &CppADScalar::asin_me)
@@ -65,15 +79,65 @@ PYBIND11_MODULE(autogen_python, m) {
       .def("erf", &CppADScalar::erf_me)
       .def("expm1", &CppADScalar::expm1_me)
       .def("log1p", &CppADScalar::log1p_me)
-      .def("to_base", [](CppADScalar& s) { return CppAD::Value(s); });
+      //      .def("__repr__",
+      //           [](CppADScalar* s) { return std::to_string(CppAD::Value(*s));
+      //           });
+      .def("__repr__",
+           [](CppADScalar s) { return std::to_string(CppAD::Value(s)); });
 
-  py::class_<CppAD::ADFun<double>>(m, "ADFun")
-      .def(py::init<ADVector, ADVector>())
-//      .def("Forward", &CppAD::ADFun<double>::Forward<ADVector>) // TODO:fix
-//      .def("Jacobian", &CppAD::ADFun<double>::Jacobian<ADVector>) // TODO:fix
-      ;
+  //  py::class_<CppAD::ADFun<double>>(m, "ADFun")
+  //      .def(py::init(
+  //          [](std::vector<CppADScalar*> x, std::vector<CppADScalar*> y) {
+  //            std::vector<CppADScalar> vx;
+  //            for (CppADScalar* s : x) {
+  //              vx.push_back(*s);
+  //            }
+  //            std::vector<CppADScalar> vy;
+  //            for (CppADScalar* s : y) {
+  //              vy.push_back(*s);
+  //            }
+  //            return new CppAD::ADFun<double>(vx, vy);
+  //          }))
+  //      .def(
+  //          "forward",
+  //          [](CppAD::ADFun<double>* f, size_t q, std::vector<double> xq) {
+  //            return f->Forward(q, xq);
+  //          },
+  //          py::return_value_policy::reference)
+  //      .def(
+  //          "jacobian",
+  //          [](CppAD::ADFun<double>* f, std::vector<double> x) {
+  //            return f->Jacobian(x);
+  //          },
+  //          py::return_value_policy::reference);
+  //
+  //  // doesn't work b/c we should change the existing vector
+//    m.def("independent", [](std::vector<CppADScalar*> x) {
+//      std::vector<CppADScalar> v;
+//      for (CppADScalar* s : x) {
+//        v.push_back(*s);
+//      }
+//      CppAD::Independent(v);
+//    });
 
-//  m.def("Independent", &CppAD::Independent<std::vector<CppAD::AD<double>>>); // TODO:fix
+  py::class_<CppAD::ADFun<double>, std::unique_ptr<CppAD::ADFun<double>>>(
+      m, "ADFun")
+      .def(py::init<ADVector, ADVector>(),
+           py::return_value_policy::reference_internal)
+      .def(
+          "forward",
+          [](CppAD::ADFun<double>& f, size_t q, std::vector<double> xq) {
+            return f.Forward(q, xq);
+          },
+          py::return_value_policy::reference)
+      .def(
+          "jacobian",
+          [](CppAD::ADFun<double>& f, std::vector<double> x) {
+            return f.Jacobian(x);
+          },
+          py::return_value_policy::reference);
+
+  m.def("independent", [](ADVector& x) { CppAD::Independent(x); });
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
