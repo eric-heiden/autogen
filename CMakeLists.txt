@@ -72,4 +72,3 @@ if (Eigen_FOUND)
 endif (Eigen_FOUND)
 
 add_subdirectory(examples)
-add_subdirectory(python)
