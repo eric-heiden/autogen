@@ -1,6 +1,3 @@
-[submodule "CppAD"]
-	path = CppAD
-	url = https://github.com/coin-or/CppAD.git
 [submodule "CppADCodeGen"]
 	path = CppADCodeGen
 	url = https://github.com/eric-heiden/CppADCodeGen.git
