@@ -303,8 +303,8 @@ struct Generated {
           }
         }
       } else {
-        std::vector<BaseScalar> input(global_input.size());
-        input.insert(input.begin(), global_input.begin(), global_input.end());
+        std::vector<BaseScalar> input(global_input);
+        input.resize(global_input.size() + local_inputs[0].size());
         for (size_t i = 0; i < local_inputs.size(); ++i) {
           for (size_t j = 0; j < local_inputs[i].size(); ++j) {
             input[j + global_input.size()] = local_inputs[i][j];
@@ -333,11 +333,8 @@ struct Generated {
           model->ForwardZero(local_inputs[i], outputs[i]);
         } else {
           static thread_local std::vector<BaseScalar> input;
-          if (input.empty()) {
-            input.resize(global_input.size());
-            input.insert(input.begin(), global_input.begin(),
-                         global_input.end());
-          }
+          input = global_input;
+          input.resize(global_input.size() + local_inputs[0].size());
           for (size_t j = 0; j < local_inputs[i].size(); ++i) {
             input[j + global_input.size()] = local_inputs[i][j];
           }
