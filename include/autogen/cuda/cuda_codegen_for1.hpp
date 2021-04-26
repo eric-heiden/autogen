@@ -87,7 +87,7 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesWithAtomics(
                            "_sparse_forward_one_indep" + std::to_string(j);
     CudaFunctionSourceGen generator(fun_name, local_input_dim(),
                                     global_input_dim_, output_dim(),
-                                    CUDA_ACCUMULATE_NONE);
+                                    ACCUMULATE_NONE);
     generator.is_forward_one = true;
 
     std::ostringstream complete;
@@ -217,7 +217,7 @@ void CudaModelSourceGen<Base>::generateSparseForwardOneSourcesNoAtomics(
                            "_sparse_forward_one_indep" + std::to_string(j);
     CudaFunctionSourceGen generator(fun_name, local_input_dim(),
                                     global_input_dim_, output_dim(),
-                                    CUDA_ACCUMULATE_NONE);
+                                    ACCUMULATE_NONE);
     generator.is_forward_one = true;
 
     std::ostringstream complete;

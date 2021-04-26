@@ -155,6 +155,7 @@ struct Generated {
   std::unique_ptr<Functor<CGScalar>> f_cg_;
 
   GenerationMode mode_{GENERATE_CPU};
+  AccumulationMethod jac_acc_method_{ACCUMULATE_NONE};
 
   mutable std::mutex compilation_mutex_;
   bool is_compiling_{false};
@@ -195,6 +196,15 @@ struct Generated {
       discard_library();
     }
     this->mode_ = mode;
+  }
+
+  AccumulationMethod jacobian_acc_method() const { return jac_acc_method_; }
+  void set_jacobian_acc_method(AccumulationMethod jac_acc_method) {
+    if (jac_acc_method != this->jac_acc_method_) {
+      // changing the jac_acc_method discards the previously compiled library
+      discard_library();
+    }
+    this->jac_acc_method_ = jac_acc_method;
   }
 
   size_t input_dim() const { return local_input_dim_ + global_input_dim_; }
@@ -281,15 +291,7 @@ struct Generated {
     }
     outputs.resize(local_inputs.size());
 
-    if (!is_compiled()) {
-      global_input_dim_ = global_input.size();
-      std::vector<BaseScalar> compilation_input;
-      compilation_input.insert(compilation_input.end(), global_input.begin(),
-                               global_input.end());
-      compilation_input.insert(compilation_input.end(), local_inputs[0].begin(),
-                               local_inputs[0].end());
-      conditionally_compile(compilation_input, outputs[0]);
-    }
+    conditionally_compile(local_inputs, outputs, global_input);
 
     if (mode_ == GENERATE_NONE || mode_ == GENERATE_CPPAD) {
       if (global_input.empty()) {
@@ -353,10 +355,9 @@ struct Generated {
 
   void jacobian(const std::vector<BaseScalar> &input,
                 std::vector<BaseScalar> &output) {
-    // TODO conditionally compile? (need to know output dim)
+    conditionally_compile(input, output);
     if (mode_ == GENERATE_NONE) {
       // central difference
-      assert(input.size() == input_dim());
       assert(output_dim() > 0);
       output.resize(input_dim() * output_dim());
       std::vector<BaseScalar> left_x = input, right_x = input;
@@ -393,7 +394,7 @@ struct Generated {
 #else
       assert(!library_name_.empty());
       GenericModelPtr &model = get_cpu_model();
-      model->Jacobian(input, output);      
+      model->Jacobian(input, output);
 #endif
     } else if (mode_ == GENERATE_CUDA) {
       const auto &model = get_cuda_model();
@@ -404,8 +405,8 @@ struct Generated {
   void jacobian(const std::vector<std::vector<BaseScalar>> &local_inputs,
                 std::vector<std::vector<BaseScalar>> &outputs,
                 const std::vector<BaseScalar> &global_input = {}) {
-    // TODO conditionally compile? (need to know output dim)
     outputs.resize(local_inputs.size());
+    conditionally_compile(local_inputs, outputs, global_input);
     if (mode_ == GENERATE_NONE || mode_ == GENERATE_CPPAD) {
       if (global_input.empty()) {
         for (size_t i = 0; i < local_inputs.size(); ++i) {
@@ -472,6 +473,13 @@ struct Generated {
  protected:
   void conditionally_compile(const std::vector<BaseScalar> &input,
                              std::vector<BaseScalar> &output) {
+    if (input_dim() == 0 || output_dim() == 0) {
+      // retrieve dimensions by evaluating double-instantiated functor on
+      // provided input
+      (*f_double_)(input, output);
+      local_input_dim_ = input.size();
+      output_dim_ = output.size();
+    }
     if (is_compiled()) {
       return;
     }
@@ -490,8 +498,6 @@ struct Generated {
     if (mode_ == GENERATE_CPU || mode_ == GENERATE_CUDA) {
       assert(!input.empty());
       assert(!output.empty());
-      local_input_dim_ = input.size();
-      output_dim_ = output.size();
       FunctionTrace<BaseScalar> t = trace(input, output);
       if (compile_in_background) {
         std::thread worker([this, &t]() { compile(t); });
@@ -502,6 +508,19 @@ struct Generated {
         std::cout << "Finished compilation.\n";
       }
     }
+  }
+
+  void conditionally_compile(
+      const std::vector<std::vector<BaseScalar>> &local_inputs,
+      std::vector<std::vector<BaseScalar>> &outputs,
+      const std::vector<BaseScalar> &global_input) {
+    global_input_dim_ = global_input.size();
+    std::vector<BaseScalar> compilation_input;
+    compilation_input.insert(compilation_input.end(), global_input.begin(),
+                             global_input.end());
+    compilation_input.insert(compilation_input.end(), local_inputs[0].begin(),
+                             local_inputs[0].end());
+    conditionally_compile(compilation_input, outputs[0]);
   }
 
   FunctionTrace<BaseScalar> trace(const std::vector<BaseScalar> &input,
@@ -650,6 +669,7 @@ struct Generated {
     CudaModelSourceGen<BaseScalar> main_source_gen(*(main_trace.tape), name);
     main_source_gen.setCreateJacobian(true);
     main_source_gen.global_input_dim() = global_input_dim_;
+    main_source_gen.jacobian_acc_method() = jac_acc_method_;
     CudaLibraryProcessor<BaseScalar> cuda_proc(&main_source_gen,
                                                name + "_cuda");
     // reverse order of invocation to first generate code for innermost

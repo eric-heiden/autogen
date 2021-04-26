@@ -76,7 +76,7 @@ std::string CudaModelSourceGen<Base>::forward_zero_source() {
 
   CudaFunctionSourceGen generator(std::string(this->_name) + "_forward_zero",
                                   local_input_dim, global_input_dim_,
-                                  output_dim, CUDA_ACCUMULATE_NONE);
+                                  output_dim, ACCUMULATE_NONE);
 
   std::ostringstream complete;
 

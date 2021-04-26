@@ -14,7 +14,7 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
  protected:
   std::size_t global_input_dim_{0};
 
-  CudaAccumulationMethod jac_acc_method_{CUDA_ACCUMULATE_MEAN};
+  AccumulationMethod jac_acc_method_{ACCUMULATE_MEAN};
 
   std::vector<std::size_t> jac_local_input_sparsity_;
   std::vector<std::size_t> jac_global_input_sparsity_;
@@ -45,8 +45,8 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
   bool is_kernel_only() const { return kernel_only_; }
   void set_kernel_only(bool option) { kernel_only_ = option; }
 
-  CudaAccumulationMethod &jacobian_acc_method() { return jac_acc_method_; }
-  const CudaAccumulationMethod &jacobian_acc_method() const {
+  AccumulationMethod &jacobian_acc_method() { return jac_acc_method_; }
+  const AccumulationMethod &jacobian_acc_method() const {
     return jac_acc_method_;
   }
 
@@ -200,7 +200,7 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
   std::string sparse_jacobian_source(
       const std::vector<std::size_t> &local_indices,
       const std::vector<std::size_t> &global_indices,
-      CudaAccumulationMethod acc_method = CUDA_ACCUMULATE_MEAN) {
+      AccumulationMethod acc_method = ACCUMULATE_MEAN) {
     const std::size_t output_dim = this->_fun.Range();
     std::vector<size_t> output_indices(output_dim, 0);
     std::iota(output_indices.begin(), output_indices.end(), 0);
@@ -210,7 +210,7 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
 
   std::string sparse_jacobian_source(
       const std::vector<std::size_t> &global_indices,
-      CudaAccumulationMethod acc_method = CUDA_ACCUMULATE_MEAN) {
+      AccumulationMethod acc_method = ACCUMULATE_MEAN) {
     const std::size_t input_dim = this->_fun.Domain() - global_input_dim_;
     std::vector<size_t> local_indices(input_dim, 0);
     std::iota(local_indices.begin(), local_indices.end(), 0);
@@ -222,7 +222,7 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
   std::string jacobian_source(
       const std::vector<std::size_t> &local_indices,
       const std::vector<std::size_t> &global_indices,
-      CudaAccumulationMethod acc_method = CUDA_ACCUMULATE_MEAN) {
+      AccumulationMethod acc_method = ACCUMULATE_MEAN) {
     const std::size_t output_dim = this->_fun.Range();
     std::vector<size_t> output_indices(output_dim, 0);
     std::iota(output_indices.begin(), output_indices.end(), 0);
@@ -232,7 +232,7 @@ class CudaModelSourceGen : public CppAD::cg::ModelCSourceGen<Base> {
 
   std::string jacobian_source(
       const std::vector<std::size_t> &global_indices,
-      CudaAccumulationMethod acc_method = CUDA_ACCUMULATE_MEAN) {
+      AccumulationMethod acc_method = ACCUMULATE_MEAN) {
     const std::size_t input_dim = this->_fun.Domain() - global_input_dim_;
     std::vector<size_t> local_indices(input_dim, 0);
     std::iota(local_indices.begin(), local_indices.end(), 0);
