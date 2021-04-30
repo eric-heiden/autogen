@@ -3,3 +3,6 @@ target_link_libraries(basic_codegen autogen)
 
 
 add_executable(regex_testing regex_testing.cpp)
+
+add_executable(test_autogen_lightweight test_autogen_lightweight.cpp)
+target_link_libraries(test_autogen_lightweight autogen)
