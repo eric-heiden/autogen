@@ -11,6 +11,7 @@
 
 namespace py = pybind11;
 using CppADScalar = typename CppAD::AD<double>;
+using CGScalar = typename CppAD::AD<CppAD::cg::CG<double>>;
 using ADVector = std::vector<CppADScalar>;
 
 PYBIND11_MAKE_OPAQUE(ADVector);
@@ -26,9 +27,9 @@ PYBIND11_MODULE(_autogen, m) {
            :toctree: _generate
     )pbdoc";
 
-  py::bind_vector<ADVector>(m, "Vector");
+  py::bind_vector<ADVector>(m, "CppADVector");
 
-  py::class_<CppADScalar>(m, "Scalar")
+  py::class_<CppADScalar>(m, "CppADScalar")
       .def(py::init([](double t) { return CppADScalar(t); }))
       .def(py::init(
           [](const CppADScalar& scalar) { return CppADScalar(scalar); }))
@@ -82,6 +83,61 @@ PYBIND11_MODULE(_autogen, m) {
       .def("__repr__", [](const CppADScalar& s) {
         return "<" + std::to_string(CppAD::Value(s)) + ">";
       });
+
+  py::class_<CGScalar>(m, "CGScalar")
+      .def(py::init([](double t) { return CGScalar(t); }))
+      .def(py::init([](const CGScalar& scalar) { return CGScalar(scalar); }))
+      .def(py::init())
+      .def(-py::self)
+      .def(py::self + py::self)
+      .def(py::self - py::self)
+      .def(py::self * py::self)
+      .def(py::self / py::self)
+      .def(py::self + float())
+      .def(py::self - float())
+      .def(py::self * float())
+      .def(py::self / float())
+      .def(float() + py::self)
+      .def(float() - py::self)
+      .def(float() * py::self)
+      .def(float() / py::self)
+      .def(py::self += py::self)
+      .def(py::self -= py::self)
+      .def(py::self *= py::self)
+      .def(py::self /= py::self)
+      .def(py::self == py::self)
+      .def(py::self != py::self)
+      .def("__pow__",
+           [](const CGScalar& s, const CGScalar& exponent) {
+             return CppAD::pow(s, exponent);
+           })
+      .def("__pow__", [](const CGScalar& s,
+                         double exponent) { return CppAD::pow(s, exponent); })
+      .def("abs", &CGScalar::abs_me)
+      .def("acos", &CGScalar::acos_me)
+      .def("asin", &CGScalar::asin_me)
+      .def("atan", &CGScalar::atan_me)
+      .def("cos", &CGScalar::cos_me)
+      .def("cosh", &CGScalar::cosh_me)
+      .def("exp", &CGScalar::exp_me)
+      .def("fabs", &CGScalar::fabs_me)
+      .def("log", &CGScalar::log_me)
+      .def("sin", &CGScalar::sin_me)
+      .def("sign", &CGScalar::sign_me)
+      .def("sinh", &CGScalar::sinh_me)
+      .def("sqrt", &CGScalar::sqrt_me)
+      .def("tan", &CGScalar::tan_me)
+      .def("tanh", &CGScalar::tanh_me)
+      .def("asinh", &CGScalar::asinh_me)
+      .def("acosh", &CGScalar::acosh_me)
+      .def("atanh", &CGScalar::atanh_me)
+      .def("erf", &CGScalar::erf_me)
+      .def("expm1", &CGScalar::expm1_me)
+      .def("log1p", &CGScalar::log1p_me)
+      .def("__repr__", [](const CGScalar& s) {
+        return "<" + std::to_string(CppAD::Value(s).getValue()) + ">";
+      });
+  ;
 
   py::class_<CppAD::ADFun<double>>(m, "Function")
       .def(py::init([](const ADVector& x, const ADVector& y) {
