@@ -551,7 +551,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     std::ostringstream os;
     os << std::setprecision(this->_parameterPrecision) << value;
     std::string number = os.str();
-    if (number.size() < 3) {
+    if (number.size() <= 3) {
       this->_streamStack << number;
       return;
     }

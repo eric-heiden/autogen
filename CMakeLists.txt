@@ -11,6 +11,10 @@ if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj /std:c++17")
 endif(MSVC)
 
+#file (GLOB AUTOGEN_HDRS "${CMAKE_CURRENT_LIST_DIR}/include/autogen/cuda/*.hpp"
+#        "${CMAKE_CURRENT_LIST_DIR}/include/autogen/utils/*.hpp"
+#        "${CMAKE_CURRENT_LIST_DIR}/include/autogen/autogen.hpp")
+
 find_package(Eigen3)
 find_package(Threads REQUIRED)
 
@@ -67,4 +71,4 @@ if (Eigen_FOUND)
   target_compile_definitions(autogen INTERFACE USE_EIGEN=1)
 endif (Eigen_FOUND)
 
-add_subdirectory(examples)
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/examples)
