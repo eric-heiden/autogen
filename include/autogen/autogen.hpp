@@ -10,6 +10,7 @@
 #include "cuda/cuda_codegen.hpp"
 #include "cuda/cuda_library_processor.hpp"
 #include "cuda/cuda_library.hpp"
+#include "cg/loop_fun_bridge.hpp"
 #include <cstdio>
 #include <iostream>
 #include <memory>
@@ -32,14 +33,14 @@ struct FunctionTrace {
   using CGScalar = typename CppAD::cg::CG<BaseScalar>;
   using ADCGScalar = typename CppAD::AD<CGScalar>;
   using ADFun = typename CppAD::ADFun<CGScalar>;
-  using CGAtomicFunBridge = typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
+  using FunBridge = typename CppAD::cg::LoopFunBridge<BaseScalar>;
 
   std::string name;
 
   std::shared_ptr<ADFun> tape{nullptr};
   // TODO fix memory leak here (bridge cannot be destructed without triggering
   // atomic_index exception in debug mode)
-  CGAtomicFunBridge *bridge{nullptr};
+  FunBridge *bridge{nullptr};
 
   std::vector<BaseScalar> trace_input;
 
@@ -48,6 +49,10 @@ struct FunctionTrace {
   size_t output_dim;
   std::vector<ADCGScalar> ax;
   std::vector<ADCGScalar> ay;
+
+  size_t num_iterations;
+  size_t const_input_dim;
+  size_t loop_dependent_dim;
 
   virtual ~FunctionTrace() {
     //  delete tape;
@@ -128,8 +133,7 @@ struct Generated {
   using CppADScalar = typename CppAD::AD<BaseScalar>;
   using CGScalar = typename CppAD::AD<CppAD::cg::CG<BaseScalar>>;
   using ADFun = typename FunctionTrace<BaseScalar>::ADFun;
-  using CGAtomicFunBridge =
-      typename FunctionTrace<BaseScalar>::CGAtomicFunBridge;
+  using FunBridge = typename FunctionTrace<BaseScalar>::FunBridge;
 
   typedef std::unique_ptr<CppAD::cg::GenericModel<BaseScalar>> GenericModelPtr;
 
@@ -170,6 +174,13 @@ struct Generated {
   std::vector<CppADScalar> ax_;
   std::vector<CppADScalar> ay_;
 
+  // discards the compiled library (so that it gets recompiled at the next
+  // evaluation)
+  void discard_library() {
+    std::lock_guard<std::mutex> guard(compilation_mutex_);
+    library_name_ = "";
+  }
+
  public:
   template <typename... Args>
   Generated(const std::string &name, Args &&... args) : name(name) {
@@ -184,8 +195,7 @@ struct Generated {
   void set_mode(GenerationMode mode) {
     if (mode != this->mode_) {
       // changing the mode discards the previously compiled library
-      std::lock_guard<std::mutex> guard(compilation_mutex_);
-      library_name_ = "";
+      discard_library();
     }
     this->mode_ = mode;
   }
@@ -194,6 +204,13 @@ struct Generated {
   size_t local_input_dim() const { return local_input_dim_; }
   size_t global_input_dim() const { return global_input_dim_; }
   size_t output_dim() const { return output_dim_; }
+
+  void set_global_input_dim(size_t global_input_dim) {
+    if (global_input_dim != global_input_dim_) {
+      discard_library();
+    }
+    global_input_dim_ = global_input_dim;
+  }
 
   bool is_compiled() const {
     std::lock_guard<std::mutex> guard(compilation_mutex_);
@@ -287,10 +304,11 @@ struct Generated {
           }
         }
       } else {
-        std::vector<BaseScalar> input(global_input.size());
-        input.insert(input.begin(), global_input.begin(), global_input.end());
+        std::vector<BaseScalar> input(global_input);
+        input.resize(input.size() +
+                     local_inputs.size() * local_inputs[0].size());
         for (size_t i = 0; i < local_inputs.size(); ++i) {
-          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+          for (size_t j = 0; j < local_inputs[i].size(); ++j) {
             input[j + global_input.size()] = local_inputs[i][j];
           }
           if (mode_ == GENERATE_NONE) {
@@ -379,7 +397,7 @@ struct Generated {
 #else
       assert(!library_name_.empty());
       GenericModelPtr &model = get_cpu_model();
-      model->Jacobian(input, output);      
+      model->Jacobian(input, output);
 #endif
     } else if (mode_ == GENERATE_CUDA) {
       const auto &model = get_cuda_model();
@@ -520,7 +538,9 @@ struct Generated {
       trace.functor(trace.ax, trace.ay);
       trace.tape = std::make_shared<ADFun>();
       trace.tape->Dependent(trace.ax, trace.ay);
-      trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
+      trace.bridge =
+          new FunBridge(trace.name, *(trace.tape), trace.num_iterations,
+                        trace.const_input_dim, trace.loop_dependent_dim);
     }
 
     // finally, trace the top-level function
@@ -535,7 +555,9 @@ struct Generated {
     (*f_cg_)(ax, ay);
     trace.tape = std::make_shared<ADFun>();
     trace.tape->Dependent(ax, ay);
-    trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
+    trace.bridge =
+        new FunBridge(name, *(trace.tape), trace.num_iterations,
+                      trace.const_input_dim, trace.loop_dependent_dim);
     trace.input_dim = input.size();
     trace.output_dim = output.size();
     return trace;
@@ -676,12 +698,12 @@ struct Generated {
 template <typename BaseScalar = double>
 inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
                         const std::vector<ADCG<BaseScalar>> &input,
-                        std::vector<ADCG<BaseScalar>> &output) {
-  using ADFun = typename FunctionTrace<BaseScalar>::ADFun;
-  using CGAtomicFunBridge =
-      typename FunctionTrace<BaseScalar>::CGAtomicFunBridge;
-
+                        std::vector<ADCG<BaseScalar>> &output,
+                        size_t num_iterations = 1, size_t const_input_dim = 0,
+                        size_t loop_dependent_dim = 0) {
   auto &traces = CodeGenData<BaseScalar>::traces;
+  size_t actual_input_dim =
+      output.size() + const_input_dim + loop_dependent_dim;
 
   if (traces.find(name) == traces.end()) {
     auto &order = CodeGenData<BaseScalar>::invocation_order;
@@ -699,13 +721,17 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
     FunctionTrace<BaseScalar> trace;
     trace.name = name;
     trace.functor = functor;
-    trace.trace_input.resize(input.size());
-    for (size_t i = 0; i < input.size(); ++i) {
+    // only trace for one loop-dependent input (1 iteration)
+    trace.trace_input.resize(actual_input_dim);
+    for (size_t i = 0; i < actual_input_dim; ++i) {
       BaseScalar raw = CppAD::Value(CppAD::Var2Par(input[i])).getValue();
       trace.trace_input[i] = raw;
     }
-    trace.input_dim = input.size();
+    trace.input_dim = actual_input_dim;
     trace.output_dim = output.size();
+    trace.num_iterations = num_iterations;
+    trace.const_input_dim = const_input_dim;
+    trace.loop_dependent_dim = loop_dependent_dim;
     traces[name] = trace;
     functor(input, output);
     return;
@@ -716,7 +742,10 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
 
   FunctionTrace<BaseScalar> &trace = traces[name];
   assert(trace.bridge);
-  (*(trace.bridge))(input, output);
+  // we can only evaluate the functor for one iteration here
+  std::vector<ADCG<BaseScalar>> actual_input(input.begin(),
+                                             input.begin() + actual_input_dim);
+  (*(trace.bridge))(actual_input, output);
 }
 
 template <typename Scalar>
@@ -724,9 +753,24 @@ inline void call_atomic(
     const std::string &name,
     const std::function<void(const std::vector<Scalar> &,
                              std::vector<Scalar> &)> &functor,
-    const std::vector<Scalar> &input, std::vector<Scalar> &output) {
+    std::vector<Scalar> input, std::vector<Scalar> &output,
+    size_t num_iterations = 1, size_t const_input_dim = 0,
+    size_t loop_dependent_dim = 0) {
   // no tracing occurs since the arguments are of type double
-  functor(input, output);
+  if (num_iterations > 1) {
+    const size_t m = output.size() + const_input_dim;
+    for (size_t i = 0; i < num_iterations; ++i) {
+      for (size_t j = 0; j < loop_dependent_dim; ++j) {
+        input[m + j] = input[m + i * loop_dependent_dim + j];
+      }
+      functor(input, output);
+      for (size_t j = 0; j < output.size(); ++j) {
+        input[j] = output[j];
+      }
+    }
+  } else {
+    functor(input, output);
+  }
 }
 
 /**

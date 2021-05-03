@@ -149,7 +149,7 @@ struct CudaFunctionSourceGen {
 
     std::string body_str = body.str();
 
-    std::cout << "Replacing variables in function " << function_name << "...\n";
+    // std::cout << "Replacing variables in function " << function_name << "...\n";
     // size_t consts = replace_constants(body_str);
     // if (consts > 0) {
     //   std::cout << "Introduced " << consts << " constant variable[s].\n";
@@ -175,7 +175,7 @@ struct CudaFunctionSourceGen {
              << output_dim
              << ";++i) printf(\"%f  \", out[i]); printf(\"\\n\");\n";
       } else {
-        code << "  printf(\"\\txj:  \"); for (unsigned long i = 0; i < "
+        code << "  printf(\"\\tx:   \"); for (unsigned long i = 0; i < "
              << local_input_dim
              << ";++i) printf(\"%f  \", xj[i]); printf(\"\\n\");\n";
         code << "  printf(\"\\ty:   \"); for (unsigned long i = 0; i < "

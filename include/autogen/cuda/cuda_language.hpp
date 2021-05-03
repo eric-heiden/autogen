@@ -97,12 +97,14 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     if (add_debug_prints) {
       this->_streamStack << this->_indentation << "printf(\"Calling "
                          << fun_name << " (p = " << p << ", q = " << q
-                         << ")...:\\n\");\n";
-      this->_streamStack << this->_indentation << "printf(\""
-                         << this->_ATOMIC_TX << ":  \"); for (i = 0; i < " << 4
-                         << "; i++) "  /// TODO fix the number of entries
-                         << "printf(\"%f  \", " << this->_ATOMIC_TX << "[i]); "
-                         << "printf(\"\\n\");\n";
+                         << ")...\\n\");\n";
+      // this->_streamStack << this->_indentation << "printf(\""
+      //                    << this->_ATOMIC_TX << ":  \"); for (i = 0; i < " <<
+      //                    4
+      //                    << "; i++) "  /// TODO fix the number of entries
+      //                    << "printf(\"%f  \", " << this->_ATOMIC_TX << "[i]);
+      //                    "
+      //                    << "printf(\"\\n\");\n";
     }
 
     if (q == 0 && p == 0) {
@@ -145,17 +147,21 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
 
     if (add_debug_prints) {
       this->_streamStack << this->_indentation << "printf(\"Called " << fun_name
-                         << " (p = " << p << ", q = " << q << "):\\n\");\n";
-      this->_streamStack << this->_indentation << "printf(\""
-                         << this->_ATOMIC_TX << ":  \"); for (i = 0; i < " << 4
-                         << "; i++) "  /// TODO fix the number of entries
-                         << "printf(\"%f  \", " << this->_ATOMIC_TX << "[i]); "
-                         << "printf(\"\\n\");\n";
-      this->_streamStack << this->_indentation << "printf(\""
-                         << this->_ATOMIC_TY << ":  \"); for (i = 0; i < " << 4
-                         << "; i++) "  /// TODO fix the number of entries
-                         << "printf(\"%f  \", " << this->_ATOMIC_TY << "[i]); "
-                         << "printf(\"\\n\");\n";
+                         << " (p = " << p << ", q = " << q << ").\\n\");\n";
+      // this->_streamStack << this->_indentation << "printf(\""
+      //                    << this->_ATOMIC_TX << ":  \"); for (i = 0; i < " <<
+      //                    4
+      //                    << "; i++) "  /// TODO fix the number of entries
+      //                    << "printf(\"%f  \", " << this->_ATOMIC_TX << "[i]);
+      //                    "
+      //                    << "printf(\"\\n\");\n";
+      // this->_streamStack << this->_indentation << "printf(\""
+      //                    << this->_ATOMIC_TY << ":  \"); for (i = 0; i < " <<
+      //                    4
+      //                    << "; i++) "  /// TODO fix the number of entries
+      //                    << "printf(\"%f  \", " << this->_ATOMIC_TY << "[i]);
+      //                    "
+      //                    << "printf(\"\\n\");\n";
     }
 
     // this->_streamStack << this->_indentation <<
@@ -326,36 +332,37 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
             _nameGen->getIndependentArrayName(refOp, getVariableID(refOp));
         size_t start =
             _nameGen->getIndependentArrayIndex(refOp, getVariableID(refOp));
-        long offset = long(start) - starti;
+        long offset = long(start) - long(starti);
         if (offset == 0)
           arrayAssign << indep << "[i]";
         else
-          arrayAssign << indep << "[" << offset << " + i]";
+          arrayAssign << indep << "[i + " << offset << "]";
 
         if (assume_cuda_namegen) {
           auto *cudaNameGen =
               static_cast<CudaVariableNameGenerator<Base> *>(this->_nameGen);
 
           // account for difference between thread-local and global input
+          long xj_offset = offset - (long)cudaNameGen->global_input_dim();
           if (starti + offset < cudaNameGen->global_input_dim()) {
             this->_streamStack
                 << this->_indentation << "for(i = " << starti << "; i < "
                 << cudaNameGen->global_input_dim() - offset << "; i++) "
                 << this->_auxArrayName
-                << "[i] = " << cudaNameGen->independent_name() << "[" << offset
-                << " + i];\n";
+                << "[i] = " << cudaNameGen->independent_name() << "[(long)i + "
+                << offset << "];\n";
             this->_streamStack
                 << this->_indentation
                 << "for(i = " << cudaNameGen->global_input_dim() - offset
                 << "; i < " << i << "; i++) " << this->_auxArrayName
-                << "[i] = " << cudaNameGen->local_name() << "[" << offset
-                << " + i];\n";
+                << "[i] = " << cudaNameGen->local_name() << "[(long)i + "
+                << xj_offset << "];\n";
           } else {
             this->_streamStack
                 << this->_indentation << "for(i = " << starti << "; i < " << i
                 << "; i++) " << this->_auxArrayName
-                << "[i] = " << cudaNameGen->local_name() << "[" << offset
-                << " + i];\n";
+                << "[i] = " << cudaNameGen->local_name() << "[(long)i + "
+                << xj_offset << "];\n";
           }
         } else {
           /**
@@ -480,7 +487,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
         if (offset == 0)
           arrayAssign << tmpName << "[i]";
         else
-          arrayAssign << tmpName << "[" << offset << " + i]";
+          arrayAssign << tmpName << "[(long)i + " << offset << "]";
 
       } else {
         // no loop used
@@ -544,6 +551,10 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     std::ostringstream os;
     os << std::setprecision(this->_parameterPrecision) << value;
     std::string number = os.str();
+    if (number.size() < 3) {
+      this->_streamStack << number;
+      return;
+    }
 
     if (constants_.find(number) == constants_.end()) {
       constants_[number] = "c" + std::to_string(constants_.size());
