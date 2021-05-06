@@ -4,7 +4,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
 
-#include "autogen/autogen.hpp"
+#include "autogen/autogen_lightweight.hpp"
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
@@ -13,8 +13,12 @@ namespace py = pybind11;
 using CppADScalar = typename CppAD::AD<double>;
 using CGScalar = typename CppAD::AD<CppAD::cg::CG<double>>;
 using ADVector = std::vector<CppADScalar>;
+using CGVector = std::vector<CGScalar>;
+
+using ADFun = typename CppAD::ADFun<CppAD::cg::CG<double>>;
 
 PYBIND11_MAKE_OPAQUE(ADVector);
+PYBIND11_MAKE_OPAQUE(CGVector);
 
 PYBIND11_MODULE(_autogen, m) {
   m.doc() = R"pbdoc(
@@ -28,6 +32,7 @@ PYBIND11_MODULE(_autogen, m) {
     )pbdoc";
 
   py::bind_vector<ADVector>(m, "CppADVector");
+  py::bind_vector<CGVector>(m, "CGVector");
 
   py::class_<CppADScalar>(m, "CppADScalar")
       .def(py::init([](double t) { return CppADScalar(t); }))
@@ -139,7 +144,8 @@ PYBIND11_MODULE(_autogen, m) {
       });
   ;
 
-  py::class_<CppAD::ADFun<double>>(m, "Function")
+  // For CppADScalar
+  py::class_<CppAD::ADFun<double>>(m, "CppADFunction")
       .def(py::init([](const ADVector& x, const ADVector& y) {
         return CppAD::ADFun<double>(x, y);
       }))
@@ -160,6 +166,37 @@ PYBIND11_MODULE(_autogen, m) {
            "Represents the traced function by a JSON string");
 
   m.def("independent", [](ADVector& x) { CppAD::Independent(x); });
+
+  // For CGScalar
+  py::class_<std::shared_ptr<CppAD::ADFun<CppAD::cg::CG<double>>>>(m,
+                                                                   "CGFunction")
+      .def(py::init([](const CGVector& x, const CGVector& y) {
+        return std::make_shared<CppAD::ADFun<CppAD::cg::CG<double>>>(x, y);
+      }))
+      //      .def(
+      //          "forward",
+      //          [](std::shared_ptr<CppAD::ADFun<CppAD::cg::CG<double>>>& f,
+      //             const std::vector<double>& xq,
+      //             size_t q) { return f->Forward(q, xq); },
+      //          "Evaluates the forward pass of the function", py::arg("x"),
+      //          py::arg("order") = 0)
+      //      .def(
+      //          "jacobian",
+      //          [](CppAD::ADFun<CppAD::cg::CG<double>>& f,
+      //             const std::vector<double>& x) { return f.Jacobian(x); },
+      //          "Evaluates the Jacobian of the function")
+      //      .def("to_json", &CppAD::ADFun<CppAD::cg::CG<double>>::to_json,
+      //           "Represents the traced function by a JSON string")
+      ;
+
+  m.def("independent", [](CGVector& x) { CppAD::Independent(x); });
+
+  py::class_<autogen::GeneratedLightWeight<double>>(m, "Autogen")
+            .def(py::init<const std::string&, std::shared_ptr<ADFun>>())
+//      .def(py::init([](const std::string& name, std::shared_ptr<ADFun> fun) {
+//        return autogen::GeneratedLightWeight<double>(name, fun);
+//      }))
+        ;
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
