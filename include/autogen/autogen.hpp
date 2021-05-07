@@ -176,13 +176,6 @@ struct Generated {
   std::vector<CppADScalar> ax_;
   std::vector<CppADScalar> ay_;
 
-  // discards the compiled library (so that it gets recompiled at the next
-  // evaluation)
-  void discard_library() {
-    std::lock_guard<std::mutex> guard(compilation_mutex_);
-    library_name_ = "";
-  }
-
  public:
   template <typename... Args>
   Generated(const std::string &name, Args &&... args) : name(name) {
@@ -726,8 +719,10 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
                         size_t num_iterations = 1, size_t const_input_dim = 0,
                         size_t loop_dependent_dim = 0) {
   auto &traces = CodeGenData<BaseScalar>::traces;
+  assert(num_iterations > 0);
+  // we only trace for the input for 1 loop iteration
   size_t actual_input_dim =
-      output.size() + const_input_dim + loop_dependent_dim;
+      input.size() - (long(num_iterations) - 1) * loop_dependent_dim;
 
   if (traces.find(name) == traces.end()) {
     auto &order = CodeGenData<BaseScalar>::invocation_order;
