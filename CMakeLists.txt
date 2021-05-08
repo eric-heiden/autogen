@@ -71,4 +71,4 @@ if (Eigen_FOUND)
   target_compile_definitions(autogen INTERFACE USE_EIGEN=1)
 endif (Eigen_FOUND)
 
-add_subdirectory(examples)
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/examples)

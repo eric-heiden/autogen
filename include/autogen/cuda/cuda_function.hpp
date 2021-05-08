@@ -203,6 +203,9 @@ struct CudaFunction {
       throw std::runtime_error("Function \"" + function_name +
                                "\" is not available.");
     }
+
+    allocate(static_cast<int>(local_inputs.size()));
+
     assert(fun_);
     bool status;
     status = send_local_input(local_inputs);
