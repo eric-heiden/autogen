@@ -6,10 +6,10 @@
 #include "cuda_language.hpp"
 
 namespace autogen {
-enum CudaAccumulationMethod {
-  CUDA_ACCUMULATE_NONE,
-  CUDA_ACCUMULATE_SUM,
-  CUDA_ACCUMULATE_MEAN
+enum AccumulationMethod {
+  ACCUMULATE_NONE,
+  ACCUMULATE_SUM,
+  ACCUMULATE_MEAN
 };
 
 struct CudaFunctionSourceGen {
@@ -17,14 +17,14 @@ struct CudaFunctionSourceGen {
   size_t local_input_dim;
   size_t global_input_dim;
   size_t output_dim;
-  CudaAccumulationMethod acc_method;
+  AccumulationMethod acc_method;
 
   bool is_forward_one{false};
   bool is_reverse_one{false};
 
   CudaFunctionSourceGen(const std::string &function_name,
                         size_t local_input_dim, size_t global_input_dim,
-                        size_t output_dim, CudaAccumulationMethod acc_method)
+                        size_t output_dim, AccumulationMethod acc_method)
       : function_name(function_name),
         local_input_dim(local_input_dim),
         global_input_dim(global_input_dim),
@@ -40,7 +40,7 @@ struct CudaFunctionSourceGen {
     code << "  data.local_input_dim = " << local_input_dim << ";\n";
     code << "  data.global_input_dim = " << global_input_dim << ";\n";
     code << "  data.accumulated_output = " << std::boolalpha
-         << (acc_method != CUDA_ACCUMULATE_NONE) << ";\n";
+         << (acc_method != ACCUMULATE_NONE) << ";\n";
     code << "  return data;\n}\n}\n";
   }
 
@@ -149,7 +149,7 @@ struct CudaFunctionSourceGen {
 
     std::string body_str = body.str();
 
-    std::cout << "Replacing variables in function " << function_name << "...\n";
+    // std::cout << "Replacing variables in function " << function_name << "...\n";
     // size_t consts = replace_constants(body_str);
     // if (consts > 0) {
     //   std::cout << "Introduced " << consts << " constant variable[s].\n";
@@ -175,7 +175,7 @@ struct CudaFunctionSourceGen {
              << output_dim
              << ";++i) printf(\"%f  \", out[i]); printf(\"\\n\");\n";
       } else {
-        code << "  printf(\"\\txj:  \"); for (unsigned long i = 0; i < "
+        code << "  printf(\"\\tx:   \"); for (unsigned long i = 0; i < "
              << local_input_dim
              << ";++i) printf(\"%f  \", xj[i]); printf(\"\\n\");\n";
         code << "  printf(\"\\ty:   \"); for (unsigned long i = 0; i < "
@@ -309,13 +309,13 @@ struct CudaFunctionSourceGen {
     exit((int)status);
   })";
 
-    if (acc_method != CUDA_ACCUMULATE_NONE) {
+    if (acc_method != ACCUMULATE_NONE) {
       code << "\n\n  // accumulate thread-wise outputs\n";
       code << "  for (int i = 1; i < num_total_threads; ++i) {\n";
       code << "   for (int j = 0; j < " << output_dim << "; ++j) {\n";
       code << "     output[j] += output[i*" << output_dim << " + j];\n";
       code << "   }\n  }\n";
-      if (acc_method == CUDA_ACCUMULATE_MEAN) {
+      if (acc_method == ACCUMULATE_MEAN) {
         code << "  for (int j = 0; j < " << output_dim << "; ++j) {\n";
         code << "   output[j] /= num_total_threads;\n  }";
       }

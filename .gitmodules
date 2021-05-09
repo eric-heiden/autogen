@@ -1,9 +1,9 @@
+[submodule "CppAD"]
+	path = CppAD
+	url = https://github.com/eric-heiden/CppAD.git
 [submodule "CppADCodeGen"]
 	path = CppADCodeGen
 	url = https://github.com/eric-heiden/CppADCodeGen.git
 [submodule "python/pybind11"]
 	path = python/pybind11
 	url = https://github.com/pybind/pybind11.git
-[submodule "CppAD"]
-	path = CppAD
-	url = https://github.com/eric-heiden/CppAD.git

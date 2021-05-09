@@ -92,7 +92,7 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesWithAtomics(
                            "_sparse_reverse_one_dep" + std::to_string(i);
     CudaFunctionSourceGen generator(fun_name, local_input_dim(),
                                     global_input_dim_, output_dim(),
-                                    CUDA_ACCUMULATE_NONE);
+                                    ACCUMULATE_NONE);
     generator.is_reverse_one = true;
 
     std::ostringstream complete;
@@ -223,7 +223,7 @@ void CudaModelSourceGen<Base>::generateSparseReverseOneSourcesNoAtomics(
                            "_sparse_reverse_one_dep" + std::to_string(i);
     CudaFunctionSourceGen generator(fun_name, local_input_dim(),
                                     global_input_dim_, output_dim(),
-                                    CUDA_ACCUMULATE_NONE);
+                                    ACCUMULATE_NONE);
     generator.is_reverse_one = true;
 
     std::ostringstream complete;

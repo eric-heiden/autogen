@@ -207,6 +207,7 @@ struct CudaFunction {
     allocate(static_cast<int>(local_inputs.size()));
 
     assert(fun_);
+    allocate_(static_cast<int>(local_inputs.size()));
     bool status;
     status = send_local_input(local_inputs);
     assert(status);
