@@ -53,6 +53,11 @@ class AbstractLoopAtomicFun : public CGAbstractAtomicFun<Base> {
                CppAD::vector<CGB>& ty) override {
     using CppAD::vector;
 
+    if (p > 1) {
+      std::cerr << "Higher-order forward mode is not yet supported for loops!\n";
+      return false;
+    }
+
     CppAD::vector<CGB> x;
 
     bool valuesDefined = BaseAbstractAtomicFun<Base>::isValuesDefined(tx);

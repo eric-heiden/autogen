@@ -3,15 +3,19 @@ Code generation for automatic differentiation with GPU support.
 
 ## Python
 
-Note that you need python3 to run this.
+Note: Only Python 3.4 and newer is supported.
 
 Install pybind11:
 ```sh
 pip install pybind11
 ```
 
-Update the current PIP installation of autogen. You should also specify the 
-compiler version to be compatible with c++17:
+For development, install autogen via the following command:
 ```sh
-CC=gcc-9 CXX=g++-9 python setup.py install
+pip install -e .
+```
+
+To specify explicitly a compatible C++17 compiler, you can do so via preprocessor definitions:
+```sh
+CC=gcc-9 CXX=g++-9 pip install -e .
 ```
