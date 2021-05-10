@@ -1,12 +1,6 @@
 #pragma once
 
-
 // clang-format off
-#include "codegen.hpp"
-#include "utils/conditionals.hpp"
-#include "cuda/cuda_codegen.hpp"
-#include "cuda/cuda_library_processor.hpp"
-#include "cuda/cuda_library.hpp"
 #include <cstdio>
 #include <iostream>
 #include <memory>
@@ -15,9 +9,20 @@
 #include <array>
 #include <mutex>
 #include <thread>
+
+#include "utils/conditionals.hpp"
+
+#include "cuda/cuda_codegen.hpp"
+#include "cuda/cuda_library_processor.hpp"
+#include "cuda/cuda_library.hpp"
+
+#include "codegen.hpp"
 // clang-format on
 
 namespace autogen {
+
+enum CodeGenTarget { TARGET_CPU, TARGET_GPU };
+
 class GeneratedCodeGen : public GeneratedBase {
  private:
   using CppADScalar = typename CppAD::AD<BaseScalar>;
@@ -37,6 +42,8 @@ class GeneratedCodeGen : public GeneratedBase {
    * and CUDA).
    */
   bool debug_mode{false};
+
+  CodeGenTarget target{TARGET_GPU};
 
  protected:
   using GeneratedBase::global_input_dim_;
@@ -63,57 +70,121 @@ class GeneratedCodeGen : public GeneratedBase {
     library_name_ = "";
   }
 
-  FunctionTrace<BaseScalar> trace(const std::vector<BaseScalar> &input,
-                                  std::vector<BaseScalar> &output) const {
-    CodeGenData<BaseScalar>::clear();
-
-    // first, a "dry run" to discover the atomic functions
-    {
-      CodeGenData<BaseScalar>::is_dry_run = true;
-      std::vector<CGScalar> ax(input.size()), ay(output.size());
-      for (size_t i = 0; i < input.size(); ++i) {
-        ax[i] = CGScalar(input[i]);
-      }
-      (*f_cg_)(ax, ay);
-      CodeGenData<BaseScalar>::is_dry_run = false;
+  void operator()(const std::vector<BaseScalar> &input,
+                  std::vector<BaseScalar> &output) override {
+    if (target == TARGET_CPU) {
+#if CPPAD_CG_SYSTEM_WIN
+      std::cerr << "CPU code generation is not yet available on Windows.\n";
+      return;
+#else
+      assert(!library_name_.empty());
+      GenericModelPtr &model = get_cpu_model();
+      model->ForwardZero(input, output);
+#endif
+    } else if (target == TARGET_GPU) {
+      const auto &model = get_cuda_model();
+      model.forward_zero(input, output);
     }
-
-    // next, trace the inner atomic functions
-    const auto &order = CodeGenData<BaseScalar>::invocation_order;
-    for (auto it = order.rbegin(); it != order.rend(); ++it) {
-      FunctionTrace<BaseScalar> &trace = CodeGenData<BaseScalar>::traces[*it];
-      std::cout << "Tracing function \"" << trace.name
-                << "\" for code generation...\n";
-      trace.ax.resize(trace.input_dim);
-      trace.ay.resize(trace.output_dim);
-      for (size_t i = 0; i < trace.input_dim; ++i) {
-        trace.ax[i] = CGScalar(trace.trace_input[i]);
-      }
-      CppAD::Independent(trace.ax);
-      trace.functor(trace.ax, trace.ay);
-      trace.tape = std::make_shared<ADFun>();
-      trace.tape->Dependent(trace.ax, trace.ay);
-      trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
-    }
-
-    // finally, trace the top-level function
-    FunctionTrace<BaseScalar> trace;
-    trace.name = name;
-    std::vector<CGScalar> ax(input.size()), ay(output.size());
-    std::cout << "Tracing function \"" << name << "\" for code generation...\n";
-    for (size_t i = 0; i < input.size(); ++i) {
-      ax[i] = CGScalar(input[i]);
-    }
-    CppAD::Independent(ax);
-    (*f_cg_)(ax, ay);
-    trace.tape = std::make_shared<ADFun>();
-    trace.tape->Dependent(ax, ay);
-    trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
-    trace.input_dim = input.size();
-    trace.output_dim = output.size();
-    return trace;
   }
 
+  void operator()(const std::vector<std::vector<BaseScalar>> &local_inputs,
+                  std::vector<std::vector<BaseScalar>> &outputs,
+                  const std::vector<BaseScalar> &global_input) override {
+    outputs.resize(local_inputs.size());
+    if (target == TARGET_CPU) {
+#if CPPAD_CG_SYSTEM_WIN
+      std::cerr << "CPU code generation is not yet available on Windows.\n";
+      return;
+#else
+      assert(!library_name_.empty());
+      for (auto &o : outputs) {
+        o.resize(output_dim_);
+      }
+      int num_tasks = static_cast<int>(local_inputs.size());
+#pragma omp parallel for
+      for (int i = 0; i < num_tasks; ++i) {
+        if (global_input.empty()) {
+          GenericModelPtr &model = get_cpu_model();
+          model->ForwardZero(local_inputs[i], outputs[i]);
+        } else {
+          static thread_local std::vector<BaseScalar> input;
+          input = global_input;
+          input.resize(global_input.size() + local_inputs[0].size());
+          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+            input[j + global_input.size()] = local_inputs[i][j];
+          }
+          GenericModelPtr &model = get_cpu_model();
+          model->ForwardZero(input, outputs[i]);
+        }
+      }
+#endif
+    } else if (target == TARGET_CUDA) {
+      const auto &model = get_cuda_model();
+      model.forward_zero(&outputs, local_inputs, num_gpu_threads_per_block,
+                         global_input);
+    }
+  }
+
+  void jacobian(const std::vector<BaseScalar> &input,
+                std::vector<BaseScalar> &output) override {
+    if (target == TARGET_CPU) {
+#if CPPAD_CG_SYSTEM_WIN
+      std::cerr << "CPU code generation is not yet available on Windows.\n";
+      return;
+#else
+      assert(!library_name_.empty());
+      GenericModelPtr &model = get_cpu_model();
+      model->Jacobian(input, output);
+#endif
+    } else if (target == TARGET_CUDA) {
+      const auto &model = get_cuda_model();
+      model.jacobian(input, output);
+    }
+  }
+
+  void jacobian(const std::vector<std::vector<BaseScalar>> &local_inputs,
+                std::vector<std::vector<BaseScalar>> &outputs,
+                const std::vector<BaseScalar> &global_input) override {
+    outputs.resize(local_inputs.size());
+    if (target == TARGET_CPU) {
+#if CPPAD_CG_SYSTEM_WIN
+      std::cerr << "CPU code generation is not yet available on Windows.\n";
+      return;
+#else
+      assert(!library_name_.empty());
+      for (auto &o : outputs) {
+        o.resize(output_dim_);
+      }
+      int num_tasks = static_cast<int>(local_inputs.size());
+#pragma omp parallel for
+      for (int i = 0; i < num_tasks; ++i) {
+        if (global_input.empty()) {
+          GenericModelPtr &model = get_cpu_model();
+          model->ForwardZero(local_inputs[i], outputs[i]);
+          model->Jacobian(local_inputs[i], outputs[i]);
+        } else {
+          static thread_local std::vector<BaseScalar> input;
+          if (input.empty()) {
+            input.resize(global_input.size());
+            input.insert(input.begin(), global_input.begin(),
+                         global_input.end());
+          }
+          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+            input[j + global_input.size()] = local_inputs[i][j];
+          }
+          GenericModelPtr &model = get_cpu_model();
+          model->Jacobian(input, outputs[i]);
+        }
+      }
+#endif
+    } else if (target == TARGET_CUDA) {
+      const auto &model = get_cuda_model();
+      model.jacobian(&outputs, local_inputs, num_gpu_threads_per_block,
+                     global_input);
+    }
+  }
+
+ protected:
   void compile_cpu(const FunctionTrace<BaseScalar> &main_trace) {
     using namespace CppAD;
     using namespace CppAD::cg;

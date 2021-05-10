@@ -1,5 +1,7 @@
 #include "autogen/autogen.hpp"
 
+#include <iostream>
+
 constexpr double PI = 3.1415926535;
 constexpr double PI_2 = PI / 2.0;
 
@@ -65,7 +67,7 @@ int main(int argc, char *argv[]) {
   std::cout << std::endl << std::endl;
 
   autogen::Generated<simple_a> gen("simple_a");
-  gen.debug_mode = false;
+  // gen.debug_mode = false;
   gen.set_mode(autogen::GENERATE_CUDA);
   // gen.set_mode(autogen::GENERATE_NONE);
   std::vector<double> jacobian;

@@ -3,16 +3,10 @@
 #include <regex>
 #include <unordered_map>
 
+#include "autogen/core/base.hpp"
 #include "cuda_language.hpp"
 
-namespace autogen {
-enum AccumulationMethod {
-  ACCUMULATE_NONE,
-  ACCUMULATE_SUM,
-  ACCUMULATE_MEAN
-};
-
-struct CudaFunctionSourceGen {
+namespace autogen {struct CudaFunctionSourceGen {
   std::string function_name;
   size_t local_input_dim;
   size_t global_input_dim;

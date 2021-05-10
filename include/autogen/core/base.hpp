@@ -6,6 +6,8 @@
 namespace autogen {
 using BaseScalar = double;
 
+enum AccumulationMethod { ACCUMULATE_NONE, ACCUMULATE_SUM, ACCUMULATE_MEAN };
+
 struct GeneratedBase {
  protected:
   int local_input_dim_{-1};

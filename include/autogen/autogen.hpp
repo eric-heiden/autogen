@@ -1,6 +1,11 @@
 #pragma once
 
+// clang-format off
 #include "core/base.hpp"
+#include "core/generated_numerical.hpp"
+#include "core/generated_cppad.hpp"
+#include "core/generated_codegen.hpp"
+// clang-format on
 
 namespace autogen {
 enum GenerationMode {
@@ -41,6 +46,10 @@ struct Generated {
   std::unique_ptr<Functor<CppADScalar>> f_cppad_;
   std::unique_ptr<Functor<CGScalar>> f_cg_;
 
+  std::unique_ptr<GeneratedNumerical> gen_double_;
+  std::unique_ptr<GeneratedCppAD> gen_cppad_;
+  std::unique_ptr<GeneratedCodeGen> gen_cg_;
+
   GenerationMode mode_{GENERATE_CPU};
 
  public:
@@ -51,9 +60,8 @@ struct Generated {
     f_cppad_ =
         std::make_unique<Functor<CppADScalar>>(std::forward<Args>(args)...);
     f_cg_ = std::make_unique<Functor<CGScalar>>(std::forward<Args>(args)...);
+    // TODO create Generated... "gen_..." instances
   }
-
-  
 
   GenerationMode mode() const { return mode_; }
   void set_mode(GenerationMode mode) {
@@ -182,38 +190,9 @@ struct Generated {
           }
         }
       }
-    } else if (mode_ == GENERATE_CPU) {
-#if CPPAD_CG_SYSTEM_WIN
-      std::cerr << "CPU code generation is not yet available on Windows.\n";
-      return;
-#else
-      assert(!library_name_.empty());
-      for (auto &o : outputs) {
-        o.resize(output_dim_);
-      }
-      int num_tasks = static_cast<int>(local_inputs.size());
-#pragma omp parallel for
-      for (int i = 0; i < num_tasks; ++i) {
-        if (global_input.empty()) {
-          GenericModelPtr &model = get_cpu_model();
-          model->ForwardZero(local_inputs[i], outputs[i]);
-        } else {
-          static thread_local std::vector<BaseScalar> input;
-          input = global_input;
-          input.resize(global_input.size() + local_inputs[0].size());
-          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
-            input[j + global_input.size()] = local_inputs[i][j];
-          }
-          GenericModelPtr &model = get_cpu_model();
-          model->ForwardZero(input, outputs[i]);
-        }
-      }
-#endif
-    } else if (mode_ == GENERATE_CUDA) {
-      const auto &model = get_cuda_model();
-      model.forward_zero(&outputs, local_inputs, num_gpu_threads_per_block,
-                         global_input);
     }
+
+    // TODO call codegen module
   }
 
   void jacobian(const std::vector<BaseScalar> &input,
@@ -250,19 +229,7 @@ struct Generated {
                                "to trigger the compilation of the Jacobian.\n");
     }
 
-    if (mode_ == GENERATE_CPU) {
-#if CPPAD_CG_SYSTEM_WIN
-      std::cerr << "CPU code generation is not yet available on Windows.\n";
-      return;
-#else
-      assert(!library_name_.empty());
-      GenericModelPtr &model = get_cpu_model();
-      model->Jacobian(input, output);
-#endif
-    } else if (mode_ == GENERATE_CUDA) {
-      const auto &model = get_cuda_model();
-      model.jacobian(input, output);
-    }
+    // TODO call codegen module
   }
 
   void jacobian(const std::vector<std::vector<BaseScalar>> &local_inputs,
@@ -295,42 +262,7 @@ struct Generated {
                                "to trigger the compilation of the Jacobian.\n");
     }
 
-    if (mode_ == GENERATE_CPU) {
-#if CPPAD_CG_SYSTEM_WIN
-      std::cerr << "CPU code generation is not yet available on Windows.\n";
-      return;
-#else
-      assert(!library_name_.empty());
-      for (auto &o : outputs) {
-        o.resize(output_dim_);
-      }
-      int num_tasks = static_cast<int>(local_inputs.size());
-#pragma omp parallel for
-      for (int i = 0; i < num_tasks; ++i) {
-        if (global_input.empty()) {
-          GenericModelPtr &model = get_cpu_model();
-          model->ForwardZero(local_inputs[i], outputs[i]);
-          model->Jacobian(local_inputs[i], outputs[i]);
-        } else {
-          static thread_local std::vector<BaseScalar> input;
-          if (input.empty()) {
-            input.resize(global_input.size());
-            input.insert(input.begin(), global_input.begin(),
-                         global_input.end());
-          }
-          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
-            input[j + global_input.size()] = local_inputs[i][j];
-          }
-          GenericModelPtr &model = get_cpu_model();
-          model->Jacobian(input, outputs[i]);
-        }
-      }
-#endif
-    } else if (mode_ == GENERATE_CUDA) {
-      const auto &model = get_cuda_model();
-      model.jacobian(&outputs, local_inputs, num_gpu_threads_per_block,
-                     global_input);
-    }
+    // TODO call codegen module
   }
 
  protected:
@@ -385,9 +317,6 @@ struct Generated {
                              local_inputs[0].end());
     conditionally_compile(compilation_input, outputs[0]);
   }
-
-  
 };
-
 
 }  // namespace autogen

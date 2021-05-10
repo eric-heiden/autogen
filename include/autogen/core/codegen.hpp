@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <cppad/cg.hpp>
 #include <cppad/cg/arithmetic.hpp>
 #ifdef USE_EIGEN
@@ -124,6 +125,60 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
   FunctionTrace<BaseScalar> &trace = traces[name];
   assert(trace.bridge);
   (*(trace.bridge))(input, output);
+}
+
+template <typename Functor>
+static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
+                                       const std::vector<BaseScalar> &input,
+                                       std::vector<BaseScalar> &output) {
+  using CGScalar = typename CppAD::cg::CG<BaseScalar>;
+  CodeGenData<BaseScalar>::clear();
+
+  // first, a "dry run" to discover the atomic functions
+  {
+    CodeGenData<BaseScalar>::is_dry_run = true;
+    std::vector<CGScalar> ax(input.size()), ay(output.size());
+    for (size_t i = 0; i < input.size(); ++i) {
+      ax[i] = CGScalar(input[i]);
+    }
+    functor(ax, ay);
+    CodeGenData<BaseScalar>::is_dry_run = false;
+  }
+
+  // next, trace the inner atomic functions
+  const auto &order = CodeGenData<BaseScalar>::invocation_order;
+  for (auto it = order.rbegin(); it != order.rend(); ++it) {
+    FunctionTrace<BaseScalar> &trace = CodeGenData<BaseScalar>::traces[*it];
+    std::cout << "Tracing function \"" << trace.name
+              << "\" for code generation...\n";
+    trace.ax.resize(trace.input_dim);
+    trace.ay.resize(trace.output_dim);
+    for (size_t i = 0; i < trace.input_dim; ++i) {
+      trace.ax[i] = CGScalar(trace.trace_input[i]);
+    }
+    CppAD::Independent(trace.ax);
+    trace.functor(trace.ax, trace.ay);
+    trace.tape = std::make_shared<ADFun>();
+    trace.tape->Dependent(trace.ax, trace.ay);
+    trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
+  }
+
+  // finally, trace the top-level function
+  FunctionTrace<BaseScalar> trace;
+  trace.name = name;
+  std::vector<CGScalar> ax(input.size()), ay(output.size());
+  std::cout << "Tracing function \"" << name << "\" for code generation...\n";
+  for (size_t i = 0; i < input.size(); ++i) {
+    ax[i] = CGScalar(input[i]);
+  }
+  CppAD::Independent(ax);
+  functor(ax, ay);
+  trace.tape = std::make_shared<ADFun>();
+  trace.tape->Dependent(ax, ay);
+  trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
+  trace.input_dim = input.size();
+  trace.output_dim = output.size();
+  return trace;
 }
 
 template <typename Scalar>
