@@ -149,6 +149,12 @@ struct Generated {
    */
   bool debug_mode{false};
 
+  /**
+   * Optimization level to use when compiling CPU and CUDA code.
+   * Will be 0 when debug_mode is active.
+   */
+  int optimization_level{1};
+
  protected:
   std::unique_ptr<Functor<BaseScalar>> f_double_;
   std::unique_ptr<Functor<CppADScalar>> f_cppad_;
@@ -187,6 +193,9 @@ struct Generated {
   void discard_library() {
     std::lock_guard<std::mutex> guard(compilation_mutex_);
     library_name_ = "";
+  }
+  void load_precompiled_library(const std::string &library_name) {
+    library_name_ = library_name;
   }
 
   GenerationMode mode() const { return mode_; }
@@ -607,7 +616,7 @@ struct Generated {
     auto compiler = std::make_unique<ClangCompiler<BaseScalar>>();
     compiler->setSourcesFolder(name + "_cpu_srcs");
     compiler->setSaveToDiskFirst(true);
-    compiler->addCompileFlag("-O" + std::to_string(1));
+    compiler->addCompileFlag("-O" + std::to_string(optimization_level));
     if (debug_mode) {
       compiler->addCompileFlag("-g");
       compiler->addCompileFlag("-O0");
@@ -686,6 +695,7 @@ struct Generated {
     cuda_proc.debug_mode() = debug_mode;
     cuda_proc.generate_code();
     cuda_proc.save_sources();
+    cuda_proc.optimization_level() = optimization_level;
     cuda_proc.create_library();
 
     std::lock_guard<std::mutex> guard(compilation_mutex_);
