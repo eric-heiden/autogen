@@ -10,11 +10,11 @@
 #include <mutex>
 #include <thread>
 
-#include "utils/conditionals.hpp"
+#include "../utils/conditionals.hpp"
 
-#include "cuda/cuda_codegen.hpp"
-#include "cuda/cuda_library_processor.hpp"
-#include "cuda/cuda_library.hpp"
+#include "../cuda/cuda_codegen.hpp"
+#include "../cuda/cuda_library_processor.hpp"
+#include "../cuda/cuda_library.hpp"
 
 #include "codegen.hpp"
 // clang-format on

@@ -132,6 +132,9 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
                                        const std::vector<BaseScalar> &input,
                                        std::vector<BaseScalar> &output) {
   using CGScalar = typename CppAD::cg::CG<BaseScalar>;
+  using ADFun = typename CppAD::ADFun<CGScalar>;
+  using CGAtomicFunBridge = typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
+
   CodeGenData<BaseScalar>::clear();
 
   // first, a "dry run" to discover the atomic functions

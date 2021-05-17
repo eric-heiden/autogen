@@ -68,20 +68,20 @@ int main(int argc, char *argv[]) {
 
   autogen::Generated<simple_a> gen("simple_a");
   // gen.debug_mode = false;
-  gen.set_mode(autogen::GENERATE_CUDA);
+//  gen.set_mode(autogen::GENERATE_CUDA);
   // gen.set_mode(autogen::GENERATE_NONE);
   std::vector<double> jacobian;
   std::vector<std::vector<double>> outputs(1);
 
   // try {
-  std::cout << "### Mode: " << gen.mode() << std::endl;
-  for (int i = 0; i < 1; ++i) {
-    gen(input, output);
-    print(output);
-
-    gen.jacobian(input, jacobian);
-    print(jacobian);
-  }
+//  std::cout << "### Mode: " << gen.mode() << std::endl;
+//  for (int i = 0; i < 1; ++i) {
+//    gen(input, output);
+//    print(output);
+//
+//    gen.jacobian(input, jacobian);
+//    print(jacobian);
+//  }
 
   // outputs[0].resize(dim);
   // gen({input}, outputs);
@@ -90,12 +90,12 @@ int main(int argc, char *argv[]) {
   //   std::cerr << e.what() << std::endl;
   // }
 
-  gen.set_mode(autogen::GENERATE_NONE);
-  std::cout << "### Mode: " << gen.mode() << std::endl;
-  gen(input, output);
-  print(output);
-  gen.jacobian(input, jacobian);
-  print(jacobian);
+//  gen.set_mode(autogen::GENERATE_NONE);
+//  std::cout << "### Mode: " << gen.mode() << std::endl;
+//  gen(input, output);
+//  print(output);
+//  gen.jacobian(input, jacobian);
+//  print(jacobian);
 
   gen.set_mode(autogen::GENERATE_CPPAD);
   std::cout << "### Mode: " << gen.mode() << std::endl;
@@ -104,12 +104,12 @@ int main(int argc, char *argv[]) {
   gen.jacobian(input, jacobian);
   print(jacobian);
 
-  gen.set_mode(autogen::GENERATE_CPU);
-  std::cout << "### Mode: " << gen.mode() << std::endl;
-  gen(input, output);
-  print(output);
-  gen.jacobian(input, jacobian);
-  print(jacobian);
+//  gen.set_mode(autogen::GENERATE_CPU);
+//  std::cout << "### Mode: " << gen.mode() << std::endl;
+//  gen(input, output);
+//  print(output);
+//  gen.jacobian(input, jacobian);
+//  print(jacobian);
 
   return EXIT_SUCCESS;
 }

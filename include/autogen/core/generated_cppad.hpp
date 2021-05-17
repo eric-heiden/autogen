@@ -42,15 +42,15 @@ class GeneratedCppAD : public GeneratedBase {
       std::function<void(const std::vector<ADScalar>&, std::vector<ADScalar>&)>
           functor,
       const std::vector<BaseScalar>& input) {
-    ax.resize(input.size());
-    ay.resize;
+    ax_.resize(input.size());
+    // TODO resize ay_?
     for (size_t i = 0; i < input.size(); ++i) {
-      ax[i] = ADScalar(input[i]);
+      ax_[i] = ADScalar(input[i]);
     }
-    CppAD::Independent(ax);
-    functor(ax, ay);
+    CppAD::Independent(ax_);
+    functor(ax_, ay_);
     tape_ = std::make_shared<CppAD::ADFun<BaseScalar>>();
-    tape_->Dependent(ax, ay);
+    tape_->Dependent(ax_, ay_);
   }
 
   void operator()(const std::vector<BaseScalar>& input,
