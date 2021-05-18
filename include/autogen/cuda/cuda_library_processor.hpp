@@ -279,8 +279,8 @@ struct CudaFunctionMetaData {
 void allocate(void **x, size_t size) {
   cudaError status = cudaMallocHost(x, size);
   if (status != cudaSuccess) {
-    fprintf(stderr, "Error %i (%s) while allocating CUDA memory: %s.\n",
-            status, cudaGetErrorName(status), cudaGetErrorString(status));
+    fprintf(stderr, "Error %i (%s) while allocating %lu units of CUDA memory: %s.\n",
+            status, cudaGetErrorName(status), size, cudaGetErrorString(status));
     exit((int)status);
   }
 }
