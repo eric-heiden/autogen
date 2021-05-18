@@ -23,3 +23,14 @@ y = gen.forward(x)
 print("y = ", y)
 J = gen.jacobian(x)
 print("j = ", J)
+
+f = ag.trace(test_function, [1., 2.], ag.Mode.CPU)
+gen = ag.GeneratedCodeGen("test_function", f)
+gen.compile_cpu()
+# gen.compile_cuda()
+
+x = [2.0, 3.0]
+y = gen.forward(x)
+print("y = ", y)
+J = gen.jacobian(x)
+print("j = ", J)

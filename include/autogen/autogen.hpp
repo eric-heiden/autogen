@@ -5,7 +5,7 @@
 #include "core/base.hpp"
 //#include "core/generated_numerical.hpp"
 #include "core/generated_cppad.hpp"
-//#include "core/generated_codegen.hpp"
+#include "core/generated_codegen.hpp"
 // clang-format on
 
 namespace autogen {
@@ -115,6 +115,7 @@ struct Generated {
   bool is_compiling() const {
 //    std::lock_guard<std::mutex> guard(compilation_mutex_);
 //    return is_compiling_;
+    return false;
   }
 
   void compile(const FunctionTrace<BaseScalar>& main_trace) {

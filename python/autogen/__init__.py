@@ -23,8 +23,8 @@ def scalar_type():
     if __AUTOGEN_SCOPE__ is None or __AUTOGEN_SCOPE__.mode == Mode.NUMERICAL:
         return float
     if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
-        return CppADScalar
-    return CGScalar
+        return ADScalar
+    return ADCGScalar
 
 
 def scalar(x):
@@ -32,8 +32,8 @@ def scalar(x):
     if __AUTOGEN_SCOPE__ is None or __AUTOGEN_SCOPE__.mode == Mode.NUMERICAL:
         return float(x)
     if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
-        return CppADScalar(x)
-    return CGScalar(x)
+        return ADScalar(x)
+    return ADCGScalar(x)
 
 
 def vector_type():
@@ -41,8 +41,8 @@ def vector_type():
     if __AUTOGEN_SCOPE__ is None or __AUTOGEN_SCOPE__.mode == Mode.NUMERICAL:
         return list
     if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
-        return CppADVector
-    return CGVector
+        return ADVector
+    return ADCGVector
 
 
 def trace(fun, xs, mode: Mode = Mode.CPPAD):
@@ -65,8 +65,8 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
     if mode == Mode.NUMERICAL:
         raise NotImplementedError("finite diff functor not yet implemented")
     if mode == Mode.CPPAD:
-        return CppADFunction(ad_x, ad_y)
-    return CGFunction(ad_x, ad_y)
+        return ADFun(ad_x, ad_y)
+    return ADCGFun(ad_x, ad_y)
 
 
 class Generated:
@@ -115,23 +115,23 @@ class Generated:
 
 
 
-# def trace(fun, xs) -> CppADFunction:
-#     ad_x = CppADVector([CppADScalar(x) for x in xs])
+# def trace(fun, xs) -> ADFun:
+#     ad_x = ADVector([ADScalar(x) for x in xs])
 #     independent(ad_x)
 #     for i in range(len(xs)):
 #         xs[i] = ad_x[i]
 #     ys = fun(xs)
-#     ad_y = CppADVector(list(ys))
-#     f = CppADFunction(ad_x, ad_y)
+#     ad_y = ADVector(list(ys))
+#     f = ADFun(ad_x, ad_y)
 #     return f
 
 
-# def trace_cg(fun, xs) -> CGFunction:
-#     ad_x = CGVector([CGScalar(x) for x in xs])
+# def trace_cg(fun, xs) -> ADCGFun:
+#     ad_x = CGVector([ADCGScalar(x) for x in xs])
 #     independent(ad_x)
 #     for i in range(len(xs)):
 #         xs[i] = ad_x[i]
 #     ys = fun(xs)
 #     ad_y = CGVector(list(ys))
-#     f = CGFunction(ad_x, ad_y)
+#     f = ADCGFun(ad_x, ad_y)
 #     return f

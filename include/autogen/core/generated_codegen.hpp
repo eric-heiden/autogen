@@ -21,13 +21,15 @@
 
 namespace autogen {
 
-enum CodeGenTarget { TARGET_CPU, TARGET_GPU };
+enum CodeGenTarget { TARGET_CPU, TARGET_CUDA };
 
 class GeneratedCodeGen : public GeneratedBase {
- private:
+ public:
   using CppADScalar = typename CppAD::AD<BaseScalar>;
   using CGScalar = typename CppAD::AD<CppAD::cg::CG<BaseScalar>>;
   using ADFun = typename FunctionTrace<BaseScalar>::ADFun;
+
+ private:
   using CGAtomicFunBridge =
       typename FunctionTrace<BaseScalar>::CGAtomicFunBridge;
 
@@ -43,7 +45,7 @@ class GeneratedCodeGen : public GeneratedBase {
    */
   bool debug_mode{false};
 
-  CodeGenTarget target{TARGET_GPU};
+  CodeGenTarget target_{TARGET_CUDA};
 
  protected:
   using GeneratedBase::global_input_dim_;
@@ -58,11 +60,19 @@ class GeneratedCodeGen : public GeneratedBase {
   // name of the compiled library
   std::string library_name_;
 
-  size_t local_input_dim_{0};
-  size_t global_input_dim_{0};
-  size_t output_dim_{0};
+  std::string name_;
 
  public:
+  FunctionTrace<BaseScalar> main_trace;
+
+  GeneratedCodeGen(const FunctionTrace<BaseScalar> &main_trace)
+      : name_(main_trace.name), main_trace(main_trace) {}
+
+  GeneratedCodeGen(const std::string &name, std::shared_ptr<ADFun> tape)
+      : name_(name) {
+    main_trace.tape = tape;
+  }
+
   // discards the compiled library (so that it gets recompiled at the next
   // evaluation)
   void discard_library() {
@@ -72,7 +82,7 @@ class GeneratedCodeGen : public GeneratedBase {
 
   void operator()(const std::vector<BaseScalar> &input,
                   std::vector<BaseScalar> &output) override {
-    if (target == TARGET_CPU) {
+    if (target_ == TARGET_CPU) {
 #if CPPAD_CG_SYSTEM_WIN
       std::cerr << "CPU code generation is not yet available on Windows.\n";
       return;
@@ -81,7 +91,7 @@ class GeneratedCodeGen : public GeneratedBase {
       GenericModelPtr &model = get_cpu_model();
       model->ForwardZero(input, output);
 #endif
-    } else if (target == TARGET_GPU) {
+    } else if (target_ == TARGET_CUDA) {
       const auto &model = get_cuda_model();
       model.forward_zero(input, output);
     }
@@ -91,7 +101,7 @@ class GeneratedCodeGen : public GeneratedBase {
                   std::vector<std::vector<BaseScalar>> &outputs,
                   const std::vector<BaseScalar> &global_input) override {
     outputs.resize(local_inputs.size());
-    if (target == TARGET_CPU) {
+    if (target_ == TARGET_CPU) {
 #if CPPAD_CG_SYSTEM_WIN
       std::cerr << "CPU code generation is not yet available on Windows.\n";
       return;
@@ -118,7 +128,7 @@ class GeneratedCodeGen : public GeneratedBase {
         }
       }
 #endif
-    } else if (target == TARGET_CUDA) {
+    } else if (target_ == TARGET_CUDA) {
       const auto &model = get_cuda_model();
       model.forward_zero(&outputs, local_inputs, num_gpu_threads_per_block,
                          global_input);
@@ -127,7 +137,7 @@ class GeneratedCodeGen : public GeneratedBase {
 
   void jacobian(const std::vector<BaseScalar> &input,
                 std::vector<BaseScalar> &output) override {
-    if (target == TARGET_CPU) {
+    if (target_ == TARGET_CPU) {
 #if CPPAD_CG_SYSTEM_WIN
       std::cerr << "CPU code generation is not yet available on Windows.\n";
       return;
@@ -136,7 +146,7 @@ class GeneratedCodeGen : public GeneratedBase {
       GenericModelPtr &model = get_cpu_model();
       model->Jacobian(input, output);
 #endif
-    } else if (target == TARGET_CUDA) {
+    } else if (target_ == TARGET_CUDA) {
       const auto &model = get_cuda_model();
       model.jacobian(input, output);
     }
@@ -146,7 +156,7 @@ class GeneratedCodeGen : public GeneratedBase {
                 std::vector<std::vector<BaseScalar>> &outputs,
                 const std::vector<BaseScalar> &global_input) override {
     outputs.resize(local_inputs.size());
-    if (target == TARGET_CPU) {
+    if (target_ == TARGET_CPU) {
 #if CPPAD_CG_SYSTEM_WIN
       std::cerr << "CPU code generation is not yet available on Windows.\n";
       return;
@@ -177,19 +187,18 @@ class GeneratedCodeGen : public GeneratedBase {
         }
       }
 #endif
-    } else if (target == TARGET_CUDA) {
+    } else if (target_ == TARGET_CUDA) {
       const auto &model = get_cuda_model();
       model.jacobian(&outputs, local_inputs, num_gpu_threads_per_block,
                      global_input);
     }
   }
 
- protected:
-  void compile_cpu(const FunctionTrace<BaseScalar> &main_trace) {
+  void compile_cpu() {
     using namespace CppAD;
     using namespace CppAD::cg;
 
-    ModelCSourceGen<BaseScalar> main_source_gen(*(main_trace.tape), name);
+    ModelCSourceGen<BaseScalar> main_source_gen(*(main_trace.tape), name_);
     main_source_gen.setCreateJacobian(true);
     ModelLibraryCSourceGen<BaseScalar> libcgen(main_source_gen);
     // reverse order of invocation to first generate code for innermost
@@ -210,28 +219,29 @@ class GeneratedCodeGen : public GeneratedBase {
     libcgen.setVerbose(true);
 #if CPPAD_CG_SYSTEM_WIN
     SaveFilesModelLibraryProcessor<double> psave(libcgen);
-    psave.saveSourcesTo(name + "_cpu_srcs");
+    psave.saveSourcesTo(name_ + "_cpu_srcs");
     std::cerr << "CPU code compilation is not yet available on Windows. Saved "
                  "source files to \""
-              << name << "_cpu_srcs"
+              << name_ << "_cpu_srcs"
               << "\".\n ";
     std::exit(1);
 #else
     DynamicModelLibraryProcessor<BaseScalar> p(libcgen);
     auto compiler = std::make_unique<ClangCompiler<BaseScalar>>();
-    compiler->setSourcesFolder(name + "_cpu_srcs");
+    compiler->setSourcesFolder(name_ + "_cpu_srcs");
     compiler->setSaveToDiskFirst(true);
     compiler->addCompileFlag("-O" + std::to_string(1));
     if (debug_mode) {
       compiler->addCompileFlag("-g");
       compiler->addCompileFlag("-O0");
     }
-    p.setLibraryName(name + "_cpu");
+    p.setLibraryName(name_ + "_cpu");
     p.createDynamicLibrary(*compiler, false);
 
     std::lock_guard<std::mutex> guard(compilation_mutex_);
-    library_name_ = "./" + name + "_cpu.so";
+    library_name_ = "./" + name_ + "_cpu.so";
 #endif
+    target_ = TARGET_CPU;
   }
 
 #if !CPPAD_CG_SYSTEM_WIN
@@ -244,14 +254,14 @@ class GeneratedCodeGen : public GeneratedBase {
       // load and wire up atomic functions in this library
       const auto &order = CodeGenData<BaseScalar>::invocation_order;
       const auto &hierarchy = CodeGenData<BaseScalar>::call_hierarchy;
-      models[name] = GenericModelPtr(lib->model(name).release());
+      models[name_] = GenericModelPtr(lib->model(name_).release());
       for (const std::string &model_name : order) {
         // we have to keep the atomic function pointers alive
         models[model_name] = GenericModelPtr(lib->model(model_name).release());
         // simply add every atomic to the top-level function
         // (because we don't have hierarchy information for the top-level
         // function)
-        models[name]->addAtomicFunction(models[model_name]->asAtomic());
+        models[name_]->addAtomicFunction(models[model_name]->asAtomic());
       }
       for (const auto &[outer, inner_models] : hierarchy) {
         auto &outer_model = models[outer];
@@ -264,25 +274,25 @@ class GeneratedCodeGen : public GeneratedBase {
         }
       }
 
-      std::cout << "Loaded compiled model \"" << name << "\" from \""
+      std::cout << "Loaded compiled model \"" << name_ << "\" from \""
                 << library_name_ << "\".\n";
       initialized = true;
     }
-    static thread_local GenericModelPtr &model = models[name];
+    static thread_local GenericModelPtr &model = models[name_];
     return model;
   }
 #endif
 
-  void compile_cuda(const FunctionTrace<BaseScalar> &main_trace) {
+  void compile_cuda() {
     using namespace CppAD;
     using namespace CppAD::cg;
 
-    CudaModelSourceGen<BaseScalar> main_source_gen(*(main_trace.tape), name);
+    CudaModelSourceGen<BaseScalar> main_source_gen(*(main_trace.tape), name_);
     main_source_gen.setCreateJacobian(true);
     main_source_gen.global_input_dim() = global_input_dim_;
     main_source_gen.jacobian_acc_method() = jac_acc_method_;
     CudaLibraryProcessor<BaseScalar> cuda_proc(&main_source_gen,
-                                               name + "_cuda");
+                                               name_ + "_cuda");
     // reverse order of invocation to first generate code for innermost
     // functions
     const auto &order = CodeGenData<BaseScalar>::invocation_order;
@@ -303,17 +313,18 @@ class GeneratedCodeGen : public GeneratedBase {
     cuda_proc.create_library();
 
     std::lock_guard<std::mutex> guard(compilation_mutex_);
-    library_name_ = name + "_cuda";
+    library_name_ = name_ + "_cuda";
 
     for (auto *model : models) {
       delete model;
     }
+    target_ = TARGET_CUDA;
   }
 
   const CudaModel<BaseScalar> &get_cuda_model() const {
     static thread_local const CudaLibrary<BaseScalar> library(library_name_);
     static thread_local const CudaModel<BaseScalar> &model =
-        library.get_model(name);
+        library.get_model(name_);
     return model;
   }
 };
