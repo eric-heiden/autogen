@@ -38,9 +38,14 @@ PYBIND11_MODULE(_autogen, m) {
   py::bind_vector<ADVector>(m, "ADVector");
   py::bind_vector<ADCGVector>(m, "ADCGVector");
 
-  expose_scalar<ADScalar>(m, "ADScalar").def("__repr__", [](const ADScalar& s) {
-    return "<" + std::to_string(CppAD::Value(CppAD::Var2Par(s))) + ">";
-  });
+  expose_scalar<ADScalar>(m, "ADScalar")
+      .def("__repr__", [](const ADScalar& s) {
+        return "<" + std::to_string(CppAD::Value(CppAD::Var2Par(s))) + ">";
+      })
+      .def("value", [](const ADScalar& s) {
+        return CppAD::Value(CppAD::Var2Par(s));
+      })
+      ;
   expose_scalar<ADCGScalar>(m, "ADCGScalar")
       .def("__repr__", [](const ADCGScalar& s) {
         return "<" +
