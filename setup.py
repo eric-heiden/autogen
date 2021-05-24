@@ -12,7 +12,7 @@ ext_modules = [
         include_dirs=['python/pybind11/include/',
                       'CppAD/include/', 'CppADCodeGen/include/', 'include/'],
         extra_compile_args=[
-            "-fopenmp"] if platform.system() in ("Linux", "Darwin") else [],
+            "-fopenmp", "-w"] if platform.system() in ("Linux", "Darwin") else [],
         extra_link_args=['-lgomp']if platform.system() in ("Linux",
                                                            "Darwin") else [],
         define_macros=[('VERSION_INFO', __version__)],

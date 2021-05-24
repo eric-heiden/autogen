@@ -9,20 +9,19 @@
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
 
 namespace py = pybind11;
-using ADScalar = typename CppAD::AD<double>;
-using CGScalar = typename CppAD::cg::CG<double>;
-using ADCGScalar = typename CppAD::AD<CGScalar>;
-
-using ADVector = std::vector<ADScalar>;
-using ADCGVector = std::vector<ADCGScalar>;
-
-using ADFun = typename CppAD::ADFun<double>;
-using ADCGFun = typename CppAD::ADFun<CGScalar>;
 
 PYBIND11_MAKE_OPAQUE(ADVector);
 PYBIND11_MAKE_OPAQUE(ADCGVector);
 PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADFun>);
 PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADCGFun>);
+
+template <typename Scalar>
+struct my_traceable_function2 {
+  Scalar operator()(const Scalar &x) const {
+    using std::cos;
+    return cos(x) * x;
+  }
+};
 
 PYBIND11_MODULE(_autogen, m) {
   m.doc() = R"pbdoc(
@@ -40,7 +39,7 @@ PYBIND11_MODULE(_autogen, m) {
 
   expose_scalar<ADScalar>(m, "ADScalar")
       .def("__repr__", [](const ADScalar& s) {
-        return "<" + std::to_string(CppAD::Value(CppAD::Var2Par(s))) + ">";
+        return "ad<" + std::to_string(CppAD::Value(CppAD::Var2Par(s))) + ">";
       })
       .def("value", [](const ADScalar& s) {
         return CppAD::Value(CppAD::Var2Par(s));
@@ -48,7 +47,7 @@ PYBIND11_MODULE(_autogen, m) {
       ;
   expose_scalar<ADCGScalar>(m, "ADCGScalar")
       .def("__repr__", [](const ADCGScalar& s) {
-        return "<" +
+        return "adcg<" +
                std::to_string(CppAD::Value(CppAD::Var2Par(s)).getValue()) + ">";
       });
 
@@ -136,6 +135,9 @@ PYBIND11_MODULE(_autogen, m) {
            "Compile to a CPU-bound shared library")
       .def("compile_cuda", &autogen::GeneratedCodeGen::compile_cuda,
            "Compile to a GPU-bound shared library");
+
+
+  publish_function<my_traceable_function2>(m, "my_traceable_function2");
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
