@@ -445,14 +445,14 @@ struct Generated {
 #else
       assert(!library_name_.empty());
       for (auto &o : outputs) {
-        o.resize(output_dim_);
+        o.resize(input_dim() * output_dim_);
       }
       int num_tasks = static_cast<int>(local_inputs.size());
 #pragma omp parallel for
       for (int i = 0; i < num_tasks; ++i) {
         if (global_input.empty()) {
           GenericModelPtr &model = get_cpu_model();
-          model->ForwardZero(local_inputs[i], outputs[i]);
+          // model->ForwardZero(local_inputs[i], outputs[i]);
           model->Jacobian(local_inputs[i], outputs[i]);
         } else {
           static thread_local std::vector<BaseScalar> input;
@@ -629,13 +629,18 @@ struct Generated {
 #endif
   }
 
+  static inline std::mutex cpu_library_loading_mutex_{};
+
 #if !CPPAD_CG_SYSTEM_WIN
   GenericModelPtr &get_cpu_model() const {
     static thread_local bool initialized = false;
-    static thread_local auto lib =
-        std::make_unique<CppAD::cg::LinuxDynamicLib<BaseScalar>>(library_name_);
+    static thread_local std::unique_ptr<CppAD::cg::LinuxDynamicLib<BaseScalar>>
+        lib;
     static thread_local std::map<std::string, GenericModelPtr> models;
     if (!initialized) {
+      cpu_library_loading_mutex_.lock();
+      lib = std::make_unique<CppAD::cg::LinuxDynamicLib<BaseScalar>>(
+          library_name_);
       // load and wire up atomic functions in this library
       const auto &order = CodeGenData<BaseScalar>::invocation_order;
       const auto &hierarchy = CodeGenData<BaseScalar>::call_hierarchy;
@@ -662,6 +667,7 @@ struct Generated {
       std::cout << "Loaded compiled model \"" << name << "\" from \""
                 << library_name_ << "\".\n";
       initialized = true;
+      cpu_library_loading_mutex_.unlock();
     }
     static thread_local GenericModelPtr &model = models[name];
     return model;
