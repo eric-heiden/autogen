@@ -10,16 +10,21 @@
 
 namespace py = pybind11;
 
-PYBIND11_MAKE_OPAQUE(ADVector);
-PYBIND11_MAKE_OPAQUE(ADCGVector);
-PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADFun>);
-PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADCGFun>);
+//template <typename Scalar>
+//struct my_traceable_function2 {
+//  Scalar operator()(const Scalar &x) const {
+//    using std::cos;
+//    std::cout << "inside function autogen!\n";
+//    return cos(x) * x;
+//  }
+//};
 
 template <typename Scalar>
 struct my_traceable_function2 {
-  Scalar operator()(const Scalar &x) const {
+  std::shared_ptr<Scalar> operator()(const std::shared_ptr<Scalar>& x) const {
     using std::cos;
-    return cos(x) * x;
+    std::cout << "inside function autogen!\n";
+    return std::make_shared<Scalar>(cos(*x.get()) * *x.get());
   }
 };
 
@@ -36,6 +41,7 @@ PYBIND11_MODULE(_autogen, m) {
 
   py::bind_vector<ADVector>(m, "ADVector");
   py::bind_vector<ADCGVector>(m, "ADCGVector");
+  py::bind_vector<ADCGPtrVector>(m, "ADCGPtrVector");
 
   expose_scalar<ADScalar>(m, "ADScalar")
       .def("__repr__", [](const ADScalar& s) {
@@ -45,42 +51,82 @@ PYBIND11_MODULE(_autogen, m) {
         return CppAD::Value(CppAD::Var2Par(s));
       })
       ;
-  expose_scalar<ADCGScalar>(m, "ADCGScalar")
-      .def("__repr__", [](const ADCGScalar& s) {
-        return "adcg<" +
-               std::to_string(CppAD::Value(CppAD::Var2Par(s)).getValue()) + ">";
-      });
+//  expose_scalar<ADCGScalar>(m, "ADCGScalar")
+//      .def("__repr__", [](const ADCGScalar& s) {
+//        return "adcg<" +
+//               std::to_string(CppAD::Value(CppAD::Var2Par(s)).getValue()) + ">";
+//      });
 
-  // For CppADScalar
-  py::class_<std::shared_ptr<ADFun>>(m, "ADFun")
-      .def(py::init([](const ADVector& x, const ADVector& y) {
-        return std::make_shared<ADFun>(x, y);
-      }))
-      .def(
-          "forward",
-          [](std::shared_ptr<ADFun>& f, const std::vector<double>& xq,
-             size_t q) { return f->Forward(q, xq); },
-          "Evaluates the forward pass of the function", py::arg("x"),
-          py::arg("order") = 0)
-      .def(
-          "jacobian",
-          [](std::shared_ptr<ADFun>& f, const std::vector<double>& x) {
-            return f->Jacobian(x);
-          },
-          "Evaluates the Jacobian of the function")
-      //      .def("to_json", &ADFun::to_json,
-      //           "Represents the traced function by a JSON string")
+  py::class_<ADCGScalarPtr>(m, "ADCGScalarPtr")
+      .def(py::init<>())
+      .def(py::init([](double t) {
+        std::cout << "Initialization of double.\n";
+        return std::make_shared<ADCGScalar>(t); }))
+      .def("__repr__", [](const ADCGScalarPtr& s) {
+        return "adcg_ptr<" +
+               std::to_string(CppAD::Value(CppAD::Var2Par(*s.get())).getValue()) + ">";
+      })
+      .def("__add__", [](const ADCGScalarPtr& s1, const ADCGScalarPtr& s2) {
+        return std::make_shared<ADCGScalar>(*s1.get() + *s2.get()); })
+      .def("cos", [](const ADCGScalarPtr& s) { return std::make_shared<ADCGScalar>(s->cos_me()); })
       ;
 
-  m.def("independent", [](ADVector& x) { CppAD::Independent(x); });
+  // For CppADScalar
+//  py::class_<std::shared_ptr<ADFun>>(m, "ADFun")
+//      .def(py::init([](const ADVector& x, const ADVector& y) {
+//        return std::make_shared<ADFun>(x, y);
+//      }))
+//      .def(
+//          "forward",
+//          [](std::shared_ptr<ADFun>& f, const std::vector<double>& xq,
+//             size_t q) { return f->Forward(q, xq); },
+//          "Evaluates the forward pass of the function", py::arg("x"),
+//          py::arg("order") = 0)
+//      .def(
+//          "jacobian",
+//          [](std::shared_ptr<ADFun>& f, const std::vector<double>& x) {
+//            return f->Jacobian(x);
+//          },
+//          "Evaluates the Jacobian of the function")
+//      //      .def("to_json", &ADFun::to_json,
+//      //           "Represents the traced function by a JSON string")
+//      ;
+
+//  m.def("independent", [](ADVector& x) { CppAD::Independent(x); });
 
   // For ADCGScalar
-  py::class_<std::shared_ptr<ADCGFun>>(m, "ADCGFun")
-      .def(py::init([](const ADCGVector& x, const ADCGVector& y) {
-        return std::make_shared<ADCGFun>(x, y);
-      }));
+//  py::class_<std::shared_ptr<ADCGFun>>(m, "ADCGFun")
+//      .def(py::init([](const ADCGVector& x, const ADCGVector& y) {
+//        return std::make_shared<ADCGFun>(x, y);
+//      }));
+//
+//  m.def("independent", [](ADCGVector& x) { CppAD::Independent(x); });
 
-  m.def("independent", [](ADCGVector& x) { CppAD::Independent(x); });
+  // For ADCGScalarPtr
+  py::class_<std::shared_ptr<ADCGFun>>(m, "ADCGPtrFun")
+      .def(py::init([](const ADCGPtrVector& x, const ADCGPtrVector& y) {
+        std::vector<ADCGScalar> input;
+        for(const auto& i: x) {
+          input.push_back(*i.get());
+        }
+        std::vector<ADCGScalar> output;
+        for(const auto& i: y) {
+          output.push_back(*i.get());
+        }
+        return std::make_shared<ADCGFun>(input, output);
+      }))
+      ;
+
+  m.def("independent", [](ADCGPtrVector& x) {
+    std::vector<ADCGScalar> input;
+    for(const auto& i: x) {
+      input.push_back(*i.get());
+    }
+    CppAD::Independent(input);
+    for (size_t i = 0; i < x.size(); i++) {
+      x[i] = std::make_shared<ADCGScalar>(input[i]);
+    }
+  });
 
   // py::class_<autogen::GeneratedLightWeight<double>>(m, "Autogen")
   //     .def(py::init<const std::string&, std::shared_ptr<ADFun>>())

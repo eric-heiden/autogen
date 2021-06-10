@@ -24,7 +24,7 @@ def scalar_type():
         return float
     if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
         return ADScalar
-    return ADCGScalar
+    # return ADCGScalar
 
 
 def scalar(x):
@@ -33,7 +33,7 @@ def scalar(x):
         return float(x)
     if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
         return ADScalar(x)
-    return ADCGScalar(x)
+    # return ADCGScalar(x)
 
 
 def vector_type():
@@ -52,22 +52,31 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
     else:
         __AUTOGEN_SCOPE__.mode = mode
 
-    Scalar = scalar_type()
-    Vector = vector_type()
+    # Scalar = scalar_type()
+    # Vector = vector_type()
+    Scalar = ADCGScalarPtr
+    Vector = ADCGPtrVector
+
+    print('before creating ad_x')
+    converted = Scalar(xs[0])
+    print('converted', converted)
+
+    # test = ADCGPtrVector([converted])
 
     ad_x = Vector([Scalar(x) for x in xs])
 
     independent(ad_x)
-    for i in range(len(xs)):
-        xs[i] = ad_x[i]
-    ys = fun(xs)
+    # for i in range(len(xs)):
+    #     xs[i] = ad_x[i]
+    # ys = fun(xs)
+    ys = fun(ad_x)
     ad_y = Vector(list(ys))
     if mode == Mode.NUMERICAL:
         raise NotImplementedError("finite diff functor not yet implemented")
     if mode == Mode.CPPAD:
         return ADFun(ad_x, ad_y)
-    return ADCGFun(ad_x, ad_y)
-
+    # return ADCGFun(ad_x, ad_y)
+    return ADCGPtrFun(ad_x, ad_y)
 
 class Generated:
     def __init__(self, function: Callable[[list], list], name: str,

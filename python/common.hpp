@@ -10,12 +10,21 @@ namespace py = pybind11;
 using ADScalar = typename CppAD::AD<double>;
 using CGScalar = typename CppAD::cg::CG<double>;
 using ADCGScalar = typename CppAD::AD<CGScalar>;
+using ADCGScalarPtr = typename std::shared_ptr<ADCGScalar>;
 
 using ADVector = std::vector<ADScalar>;
 using ADCGVector = std::vector<ADCGScalar>;
+using ADCGPtrVector = std::vector<ADCGScalarPtr>;
 
 using ADFun = typename CppAD::ADFun<double>;
 using ADCGFun = typename CppAD::ADFun<CGScalar>;
+
+PYBIND11_MAKE_OPAQUE(ADVector);
+PYBIND11_MAKE_OPAQUE(ADCGVector);
+PYBIND11_MAKE_OPAQUE(ADCGPtrVector);
+PYBIND11_MAKE_OPAQUE(ADCGScalarPtr);
+PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADFun>);
+PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADCGFun>);
 
 template <typename Scalar>
 py::class_<Scalar, std::shared_ptr<Scalar>> expose_scalar(py::handle m, const char* name) {
@@ -78,7 +87,18 @@ void publish_function(Module m, const char* name) {
   // m.def(name,
   //       [&functor_ad](const ADScalar& x, const std::vector<ADScalar>& y)
   //           -> ADScalar { return functor_ad(x, y); });
+//  m.def(name,
+//        [&functor_cg](const ADCGScalar& x)
+//            -> ADCGScalar {
+//    std::cout << "Inside publish_function\n";
+//    return functor_cg(x); });
+
+
+//  static Functor<ADCGScalarPtr> functor_cg_ptr;
+// Where does the conversion happen?
   m.def(name,
-        [&functor_cg](const ADCGScalar& x)
-            -> ADCGScalar { return functor_cg(x); });
+        [&functor_cg](const ADCGScalarPtr& x)
+            -> ADCGScalarPtr {
+    std::cout << "Inside pointer publish_function\n";
+    return functor_cg(x); });
 }
