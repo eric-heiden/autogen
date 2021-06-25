@@ -141,7 +141,7 @@ struct CudaFunction {
       throw std::runtime_error("Function \"" + function_name +
                                "\" is not available.");
     }
-    allocate_(num_total_threads);
+    allocate(num_total_threads);
     assert(fun_);
     bool status;
     status = send_global_input(input);
@@ -164,7 +164,7 @@ struct CudaFunction {
       throw std::runtime_error("Function \"" + function_name +
                                "\" is not available.");
     }
-    allocate_(1);
+    allocate(1);
     assert(fun_);
     bool status;
     const Scalar *input_data = input.data();
@@ -207,7 +207,6 @@ struct CudaFunction {
     allocate(static_cast<int>(local_inputs.size()));
 
     assert(fun_);
-    allocate_(static_cast<int>(local_inputs.size()));
     bool status;
     status = send_local_input(local_inputs);
     assert(status);

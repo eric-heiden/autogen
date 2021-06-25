@@ -34,7 +34,8 @@ struct FunctionTrace {
   using CGScalar = typename CppAD::cg::CG<BaseScalar>;
   using ADCGScalar = typename CppAD::AD<CGScalar>;
   using ADFun = typename CppAD::ADFun<CGScalar>;
-  using FunBridge = typename CppAD::cg::LoopFunBridge<BaseScalar>;
+  // using FunBridge = typename CppAD::cg::LoopFunBridge<BaseScalar>;
+  using FunBridge = typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
 
   std::string name;
 
@@ -414,10 +415,10 @@ struct Generated {
           jacobian(local_inputs[i], outputs[i]);
         }
       } else {
-        std::vector<BaseScalar> input(global_input.size());
+        std::vector<BaseScalar> input(local_inputs[0].size());
         input.insert(input.begin(), global_input.begin(), global_input.end());
         for (size_t i = 0; i < local_inputs.size(); ++i) {
-          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+          for (size_t j = 0; j < local_inputs[i].size(); ++j) {
             input[j + global_input.size()] = local_inputs[i][j];
           }
           jacobian(input, outputs[i]);
@@ -522,6 +523,7 @@ struct Generated {
     compilation_input.insert(compilation_input.end(), local_inputs[0].begin(),
                              local_inputs[0].end());
     conditionally_compile(compilation_input, outputs[0]);
+    local_input_dim_ = local_inputs[0].size();
   }
 
   FunctionTrace<BaseScalar> trace(const std::vector<BaseScalar> &input,
@@ -554,9 +556,10 @@ struct Generated {
       trace.functor(trace.ax, trace.ay);
       trace.tape = std::make_shared<ADFun>();
       trace.tape->Dependent(trace.ax, trace.ay);
-      trace.bridge =
-          new FunBridge(trace.name, *(trace.tape), trace.num_iterations,
-                        trace.const_input_dim, trace.loop_dependent_dim);
+      // trace.bridge =
+      //     new FunBridge(trace.name, *(trace.tape), trace.num_iterations,
+      //                   trace.const_input_dim, trace.loop_dependent_dim);
+      trace.bridge = new FunBridge(trace.name, *(trace.tape));
     }
 
     // finally, trace the top-level function
@@ -571,9 +574,10 @@ struct Generated {
     (*f_cg_)(ax, ay);
     trace.tape = std::make_shared<ADFun>();
     trace.tape->Dependent(ax, ay);
-    trace.bridge =
-        new FunBridge(name, *(trace.tape), trace.num_iterations,
-                      trace.const_input_dim, trace.loop_dependent_dim);
+    // trace.bridge =
+    //     new FunBridge(name, *(trace.tape), trace.num_iterations,
+    //                   trace.const_input_dim, trace.loop_dependent_dim);
+    trace.bridge = new FunBridge(trace.name, *(trace.tape));
     trace.input_dim = input.size();
     trace.output_dim = output.size();
     return trace;
