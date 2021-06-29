@@ -24,12 +24,8 @@ template <typename Scalar>
 py::class_<Scalar, std::shared_ptr<Scalar>> expose_scalar(py::handle m,
                                                           const char* name) {
   return py::class_<Scalar, std::shared_ptr<Scalar>>(m, name)
-      .def(py::init([](double t) {
-        return Scalar(t);
-      }))
-      .def(py::init([](const Scalar& scalar) {
-        return Scalar(scalar);
-      }))
+      .def(py::init([](double t) { return Scalar(t); }))
+      .def(py::init([](const Scalar& scalar) { return Scalar(scalar); }))
       .def(py::init())
       .def(-py::self)
       .def(py::self + py::self)
@@ -79,6 +75,46 @@ py::class_<Scalar, std::shared_ptr<Scalar>> expose_scalar(py::handle m,
       .def("log1p", &Scalar::log1p_me);
 }
 
+template <typename Scalar>
+static void retrieve_tape();
+
+template <>
+void retrieve_tape<ADScalar>() {
+  std::cout << "Retrieving ADScalar tape table...\n";
+  ADScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<double>*>(
+      py::get_shared_data("tape_table_ad"));
+}
+
+template <>
+void retrieve_tape<ADCGScalar>() {
+  std::cout << "Retrieving ADCGScalar tape table...\n";
+  ADCGScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<CGScalar>*>(
+      py::get_shared_data("tape_table_adcg"));
+}
+
+template <>
+void retrieve_tape<double>() {
+  // do nothing
+}
+
+template <typename Scalar>
+static std::string scalar_name();
+
+template <>
+std::string scalar_name<ADScalar>() {
+  return "AD";
+}
+
+template <>
+std::string scalar_name<ADCGScalar>() {
+  return "ADCG";
+}
+
+template <>
+std::string scalar_name<double>() {
+  return "double";
+}
+
 template <template <typename> typename Functor>
 struct publish_function {
   Functor<ADScalar> functor_ad;
@@ -86,18 +122,13 @@ struct publish_function {
 
   void operator()(py::module& m, const char* name) {
     m.def(name, [this, name](const ADScalar& x) -> ADScalar {
-      std::cout << "Retrieving ADScalar tape table...\n";
-      ADScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<double>*>(
-          py::get_shared_data("tape_table_ad"));
+      retrieve_tape<ADScalar>();
       std::cout << "Calling CppAD " << name << " with x = " << x << "\n";
       return functor_ad(x);
     });
 
     m.def(name, [this, name](const ADCGScalar& x) -> ADCGScalar {
-      std::cout << "Retrieving ADCGScalar tape table...\n";
-      ADCGScalar::tape_table[0] =
-          reinterpret_cast<CppAD::local::ADTape<CGScalar>*>(
-              py::get_shared_data("tape_table_adcg"));
+      retrieve_tape<ADCGScalar>();
       std::cout << "Calling CodeGen " << name << " with x = " << x << "\n";
       return functor_cg(x);
     });

@@ -27,6 +27,15 @@ def scalar_type():
     return ADCGScalar
 
 
+def scalar_name():
+    global __AUTOGEN_SCOPE__
+    if __AUTOGEN_SCOPE__ is None or __AUTOGEN_SCOPE__.mode == Mode.NUMERICAL:
+        return "double"
+    if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
+        return "AD"
+    return "ADCG"
+
+
 def scalar(x):
     global __AUTOGEN_SCOPE__
     if __AUTOGEN_SCOPE__ is None or __AUTOGEN_SCOPE__.mode == Mode.NUMERICAL:
