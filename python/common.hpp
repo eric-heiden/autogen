@@ -1,7 +1,10 @@
 #pragma once
 
+#include <pybind11/functional.h>
 #include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <pybind11/stl_bind.h>
 
 #include "autogen/autogen.hpp"
 
@@ -10,27 +13,23 @@ namespace py = pybind11;
 using ADScalar = typename CppAD::AD<double>;
 using CGScalar = typename CppAD::cg::CG<double>;
 using ADCGScalar = typename CppAD::AD<CGScalar>;
-using ADCGScalarPtr = typename std::shared_ptr<ADCGScalar>;
 
 using ADVector = std::vector<ADScalar>;
 using ADCGVector = std::vector<ADCGScalar>;
-using ADCGPtrVector = std::vector<ADCGScalarPtr>;
 
 using ADFun = typename CppAD::ADFun<double>;
 using ADCGFun = typename CppAD::ADFun<CGScalar>;
 
-PYBIND11_MAKE_OPAQUE(ADVector);
-PYBIND11_MAKE_OPAQUE(ADCGVector);
-PYBIND11_MAKE_OPAQUE(ADCGPtrVector);
-PYBIND11_MAKE_OPAQUE(ADCGScalarPtr);
-PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADFun>);
-PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADCGFun>);
-
 template <typename Scalar>
-py::class_<Scalar, std::shared_ptr<Scalar>> expose_scalar(py::handle m, const char* name) {
+py::class_<Scalar, std::shared_ptr<Scalar>> expose_scalar(py::handle m,
+                                                          const char* name) {
   return py::class_<Scalar, std::shared_ptr<Scalar>>(m, name)
-      .def(py::init([](double t) { return Scalar(t); }))
-      .def(py::init([](const Scalar& scalar) { return Scalar(scalar); }))
+      .def(py::init([](double t) {
+        return Scalar(t);
+      }))
+      .def(py::init([](const Scalar& scalar) {
+        return Scalar(scalar);
+      }))
       .def(py::init())
       .def(-py::self)
       .def(py::self + py::self)
@@ -80,25 +79,27 @@ py::class_<Scalar, std::shared_ptr<Scalar>> expose_scalar(py::handle m, const ch
       .def("log1p", &Scalar::log1p_me);
 }
 
-template <template <typename> typename Functor, typename Module>
-void publish_function(Module m, const char* name) {
-  static Functor<ADScalar> functor_ad;
-  static Functor<ADCGScalar> functor_cg;
-  // m.def(name,
-  //       [&functor_ad](const ADScalar& x, const std::vector<ADScalar>& y)
-  //           -> ADScalar { return functor_ad(x, y); });
-//  m.def(name,
-//        [&functor_cg](const ADCGScalar& x)
-//            -> ADCGScalar {
-//    std::cout << "Inside publish_function\n";
-//    return functor_cg(x); });
+template <template <typename> typename Functor>
+struct publish_function {
+  Functor<ADScalar> functor_ad;
+  Functor<ADCGScalar> functor_cg;
 
+  void operator()(py::module& m, const char* name) {
+    m.def(name, [this, name](const ADScalar& x) -> ADScalar {
+      std::cout << "Retrieving ADScalar tape table...\n";
+      ADScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<double>*>(
+          py::get_shared_data("tape_table_ad"));
+      std::cout << "Calling CppAD " << name << " with x = " << x << "\n";
+      return functor_ad(x);
+    });
 
-//  static Functor<ADCGScalarPtr> functor_cg_ptr;
-// Where does the conversion happen?
-  m.def(name,
-        [&functor_cg](const ADCGScalarPtr& x)
-            -> ADCGScalarPtr {
-    std::cout << "Inside pointer publish_function\n";
-    return functor_cg(x); });
-}
+    m.def(name, [this, name](const ADCGScalar& x) -> ADCGScalar {
+      std::cout << "Retrieving ADCGScalar tape table...\n";
+      ADCGScalar::tape_table[0] =
+          reinterpret_cast<CppAD::local::ADTape<CGScalar>*>(
+              py::get_shared_data("tape_table_adcg"));
+      std::cout << "Calling CodeGen " << name << " with x = " << x << "\n";
+      return functor_cg(x);
+    });
+  }
+};
