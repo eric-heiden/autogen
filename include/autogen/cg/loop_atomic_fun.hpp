@@ -390,7 +390,7 @@ class AbstractLoopAtomicFun : public CGAbstractAtomicFun<Base> {
         txArray[k] =
             BaseAbstractAtomicFun<Base>::makeSparseArray(*handler, tx, p, k);
 
-      if (standAlone_) {
+      if (this->standAlone_) {
         tyArray[k] =
             BaseAbstractAtomicFun<Base>::makeEmptySparseArray(*handler, m);
       } else {
