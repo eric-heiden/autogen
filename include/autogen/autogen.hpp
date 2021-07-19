@@ -3,7 +3,7 @@
 // clang-format off
 #include "core/codegen.hpp"
 #include "core/base.hpp"
-//#include "core/generated_numerical.hpp"
+#include "core/generated_numerical.hpp"
 #include "core/generated_cppad.hpp"
 #include "core/generated_codegen.hpp"
 // clang-format on
@@ -42,56 +42,64 @@ struct Generated {
 
   const std::string name;
 
-  using CppADScalar = typename CppAD::AD<BaseScalar>;
-  using CGScalar = typename CppAD::AD<CppAD::cg::CG<BaseScalar>>;
+  using ADScalar = typename CppAD::AD<BaseScalar>;
+  using CGScalar = typename CppAD::cg::CG<BaseScalar>;
+  using ADCGScalar = typename CppAD::AD<CGScalar>;
   using ADFun = typename FunctionTrace<BaseScalar>::ADFun;
 
- protected:
-  std::unique_ptr<Functor<BaseScalar>> f_double_;
-  std::unique_ptr<Functor<CppADScalar>> f_cppad_;
-  std::unique_ptr<Functor<CGScalar>> f_cg_;
+  bool compile_in_background{false};
+  bool is_compiling_{false};
 
-  //  std::unique_ptr<GeneratedNumerical> gen_double_;
-  std::unique_ptr<GeneratedCppAD> gen_cppad_;
-  //  std::unique_ptr<GeneratedCodeGen> gen_cg_;
+ protected:
+  std::unique_ptr<Functor<BaseScalar>> f_double_{nullptr};
+  std::unique_ptr<Functor<ADScalar>> f_cppad_{nullptr};
+  std::unique_ptr<Functor<ADCGScalar>> f_cg_{nullptr};
+
+  std::unique_ptr<GeneratedNumerical> gen_double_{nullptr};
+  std::unique_ptr<GeneratedCppAD> gen_cppad_{nullptr};
+  std::unique_ptr<GeneratedCodeGen> gen_cg_{nullptr};
 
   size_t local_input_dim_{0};
   size_t global_input_dim_{0};
   size_t output_dim_{0};
 
   GenerationMode mode_{GENERATE_CPU};
+  mutable std::mutex compilation_mutex_;
 
  public:
   template <typename... Args>
   Generated(const std::string& name, Args&&... args) : name(name) {
     f_double_ =
         std::make_unique<Functor<BaseScalar>>(std::forward<Args>(args)...);
-    f_cppad_ =
-        std::make_unique<Functor<CppADScalar>>(std::forward<Args>(args)...);
-    f_cg_ = std::make_unique<Functor<CGScalar>>(std::forward<Args>(args)...);
-    // TODO create Generated... "gen_..." instances
-
-    // TODO: create them in compile()?
+    gen_double_ = std::make_unique<GeneratedNumerical>(*f_double_);
+    f_cppad_ = std::make_unique<Functor<ADScalar>>(std::forward<Args>(args)...);
+    f_cg_ = std::make_unique<Functor<ADCGScalar>>(std::forward<Args>(args)...);
   }
 
   GenerationMode mode() const { return mode_; }
   void set_mode(GenerationMode mode) {
     if (mode != this->mode_) {
       // changing the mode discards the previously compiled library
-      //      discard_library();
+      discard_library();
     }
     this->mode_ = mode;
   }
 
-  //  AccumulationMethod jacobian_acc_method() const { return jac_acc_method_; }
-  //  void set_jacobian_acc_method(AccumulationMethod jac_acc_method) {
-  //    if (jac_acc_method != this->jac_acc_method_) {
-  //      // changing the jac_acc_method discards the previously compiled
-  //      library
-  ////      discard_library();
-  //    }
-  //    this->jac_acc_method_ = jac_acc_method;
-  //  }
+  void discard_library() {
+    if (gen_cg_) {
+      // std::lock_guard<std::mutex> guard(compilation_mutex_);
+      gen_cg_->discard_library();
+    }
+  }
+
+  AccumulationMethod jacobian_acc_method() const { return jac_acc_method_; }
+  void set_jacobian_acc_method(AccumulationMethod jac_acc_method) {
+    if (jac_acc_method != this->jac_acc_method_) {
+      // changing the jac_acc_method discards the previously compiled library
+      discard_library();
+    }
+    this->jac_acc_method_ = jac_acc_method;
+  }
 
   size_t input_dim() const { return local_input_dim_ + global_input_dim_; }
   size_t local_input_dim() const { return local_input_dim_; }
@@ -106,14 +114,14 @@ struct Generated {
   }
 
   bool is_compiled() const {
-    //    std::lock_guard<std::mutex> guard(compilation_mutex_);
     switch (mode_) {
       case GENERATE_NONE:
         return true;
       case GENERATE_CPPAD:
-        return gen_cppad_ != nullptr;
-        //      case GENERATE_CPU:
-        //      case GENERATE_CUDA:return !library_name_.empty();
+        return (bool)gen_cppad_;
+      case GENERATE_CPU:
+      case GENERATE_CUDA:
+        return gen_cg_ && gen_cg_->is_compiled();
     }
     return false;
   }
@@ -125,21 +133,21 @@ struct Generated {
   }
 
   void compile(const FunctionTrace<BaseScalar>& main_trace) {
-    //    {
-    //      std::lock_guard<std::mutex> guard(compilation_mutex_);
-    //      is_compiling_ = true;
-    //    }
-    //
-    //    if (mode_ == GENERATE_CPU) {
-    //      compile_cpu(main_trace);
-    //    } else if (mode_ == GENERATE_CUDA) {
-    //      compile_cuda(main_trace);
-    //    }
-    //
-    //    {
-    //      std::lock_guard<std::mutex> guard(compilation_mutex_);
-    //      is_compiling_ = false;
-    //    }
+    {
+      // std::lock_guard<std::mutex> guard(compilation_mutex_);
+      is_compiling_ = true;
+    }
+
+    if (mode_ == GENERATE_CPU) {
+      gen_cg_->compile_cpu();
+    } else if (mode_ == GENERATE_CUDA) {
+      gen_cg_->compile_cuda();
+    }
+
+    {
+      // std::lock_guard<std::mutex> guard(compilation_mutex_);
+      is_compiling_ = false;
+    }
   }
 
   void operator()(const std::vector<BaseScalar>& input,
@@ -147,21 +155,11 @@ struct Generated {
     conditionally_compile(input, output);
 
     if (mode_ == GENERATE_NONE) {
-      (*f_double_)(input, output);
-    } else if (mode_ == GENERATE_CPU) {
-      //#if CPPAD_CG_SYSTEM_WIN
-      //      std::cerr << "CPU code generation is not yet available on
-      //      Windows.\n"; return;
-      //#else
-      //      assert(!library_name_.empty());
-      //      GenericModelPtr& model = get_cpu_model();
-      //      model->ForwardZero(input, output);
-      //#endif
-    } else if (mode_ == GENERATE_CUDA) {
-      //      const auto& model = get_cuda_model();
-      //      model.forward_zero(input, output);
+      (*gen_double_)(input, output);
     } else if (mode_ == GENERATE_CPPAD) {
       (*gen_cppad_)(input, output);
+    } else {
+      (*gen_cg_)(input, output);
     }
   }
 
@@ -179,55 +177,21 @@ struct Generated {
 
     conditionally_compile(local_inputs, outputs, global_input);
 
-    if (mode_ == GENERATE_NONE || mode_ == GENERATE_CPPAD) {
-      if (global_input.empty()) {
-        for (size_t i = 0; i < local_inputs.size(); ++i) {
-          if (mode_ == GENERATE_NONE) {
-            (*f_double_)(local_inputs[i], outputs[i]);
-          } else {
-            (*gen_cppad_)(local_inputs[i], outputs[i]);
-          }
-        }
-      } else {
-        std::vector<BaseScalar> input(global_input);
-        input.resize(global_input.size() + local_inputs[0].size());
-        for (size_t i = 0; i < local_inputs.size(); ++i) {
-          for (size_t j = 0; j < local_inputs[i].size(); ++j) {
-            input[j + global_input.size()] = local_inputs[i][j];
-          }
-          if (mode_ == GENERATE_NONE) {
-            (*f_double_)(input, outputs[i]);
-          } else {
-            (*gen_cppad_)(input, outputs[i]);
-          }
-        }
-      }
+    if (mode_ == GENERATE_NONE) {
+      (*gen_double_)(local_inputs, outputs, global_input);
+    } else if (mode_ == GENERATE_CPPAD) {
+      (*gen_cppad_)(local_inputs, outputs, global_input);
+    } else {
+      (*gen_cg_)(local_inputs, outputs, global_input);
     }
-
-    // TODO call codegen module
   }
 
   void jacobian(const std::vector<BaseScalar>& input,
                 std::vector<BaseScalar>& output) {
     conditionally_compile(input, output);
     if (mode_ == GENERATE_NONE) {
-      //      // central difference
-      //      assert(output_dim() > 0);
-      //      output.resize(input_dim() * output_dim());
-      //      std::vector<BaseScalar> left_x = input, right_x = input;
-      //      std::vector<BaseScalar> left_y(output_dim()),
-      //      right_y(output_dim()); for (size_t i = 0; i < input.size(); ++i) {
-      //        left_x[i] -= finite_diff_eps;
-      //        right_x[i] += finite_diff_eps;
-      //        BaseScalar dx = right_x[i] - left_x[i];
-      //        (*f_double_)(left_x, left_y);
-      //        (*f_double_)(right_x, right_y);
-      //        for (size_t j = 0; j < output_dim(); ++j) {
-      //          output[j * input_dim() + i] = (right_y[j] - left_y[j]) / dx;
-      //        }
-      //        left_x[i] = right_x[i] = input[i];
-      //      }
-      //      return;
+      gen_double_->jacobian(input, output);
+      return;
     }
     if (mode_ == GENERATE_CPPAD) {
       gen_cppad_->jacobian(input, output);
@@ -241,7 +205,7 @@ struct Generated {
                                "to trigger the compilation of the Jacobian.\n");
     }
 
-    // TODO call codegen module
+    gen_cg_->jacobian(input, output);
   }
 
   void jacobian(const std::vector<std::vector<BaseScalar>>& local_inputs,
@@ -249,21 +213,12 @@ struct Generated {
                 const std::vector<BaseScalar>& global_input = {}) {
     outputs.resize(local_inputs.size());
     conditionally_compile(local_inputs, outputs, global_input);
-    if (mode_ == GENERATE_NONE || mode_ == GENERATE_CPPAD) {
-      if (global_input.empty()) {
-        for (size_t i = 0; i < local_inputs.size(); ++i) {
-          gen_cppad_->jacobian(local_inputs[i], outputs[i]);
-        }
-      } else {
-        std::vector<BaseScalar> input(local_inputs[0].size());
-        input.insert(input.begin(), global_input.begin(), global_input.end());
-        for (size_t i = 0; i < local_inputs.size(); ++i) {
-          for (size_t j = 0; j < local_inputs[i].size(); ++j) {
-            input[j + global_input.size()] = local_inputs[i][j];
-          }
-          jacobian(input, outputs[i]);
-        }
-      }
+    if (mode_ == GENERATE_NONE) {
+      gen_double_->jacobian(local_inputs, outputs, global_input);
+      return;
+    }
+    if (mode_ == GENERATE_CPPAD) {
+      gen_cppad_->jacobian(local_inputs, outputs, global_input);
       return;
     }
 
@@ -274,7 +229,7 @@ struct Generated {
                                "to trigger the compilation of the Jacobian.\n");
     }
 
-    // TODO call codegen module
+    gen_cg_->jacobian(local_inputs, outputs, global_input);
   }
 
  protected:
@@ -295,7 +250,7 @@ struct Generated {
       ax_.resize(input.size());
       ay_.resize(output.size());
       for (size_t i = 0; i < input.size(); ++i) {
-        ax_[i] = CppADScalar(input[i]);
+        ax_[i] = ADScalar(input[i]);
       }
       CppAD::Independent(ax_);
       (*f_cppad_)(ax_, ay_);
@@ -304,17 +259,24 @@ struct Generated {
       return;
     }
     if (mode_ == GENERATE_CPU || mode_ == GENERATE_CUDA) {
-      //      assert(!input.empty());
-      //      assert(!output.empty());
-      //      FunctionTrace<BaseScalar> t = trace(input, output);
-      //      if (compile_in_background) {
-      //        std::thread worker([this, &t]() { compile(t); });
-      //        (*f_double_)(input, output);
-      //        return;
-      //      } else {
-      //        compile(t);
-      //        std::cout << "Finished compilation.\n";
-      //      }
+      // std::lock_guard<std::mutex> guard(compilation_mutex_);
+
+      assert(!input.empty());
+      assert(!output.empty());
+      std::vector<CppAD::cg::CG<BaseScalar>> cg_input(input.size());
+      std::vector<CppAD::cg::CG<BaseScalar>> cg_output(output.size());
+      for (size_t i = 0; i < input.size(); ++i) {
+      }
+      FunctionTrace<BaseScalar> t = autogen::trace(*f_cg_, name, input, output);
+      gen_cg_ = std::make_unique<GeneratedCodeGen>(t);
+      if (compile_in_background) {
+        std::thread worker([this, &t]() { compile(t); });
+        (*f_double_)(input, output);
+        return;
+      } else {
+        compile(t);
+        std::cout << "Finished compilation.\n";
+      }
     }
   }
 

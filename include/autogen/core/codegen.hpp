@@ -132,6 +132,7 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
                                        const std::vector<BaseScalar> &input,
                                        std::vector<BaseScalar> &output) {
   using CGScalar = typename CppAD::cg::CG<BaseScalar>;
+  using ADCGScalar = typename CppAD::AD<CGScalar>;
   using ADFun = typename CppAD::ADFun<CGScalar>;
   using CGAtomicFunBridge = typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
 
@@ -140,9 +141,9 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
   // first, a "dry run" to discover the atomic functions
   {
     CodeGenData<BaseScalar>::is_dry_run = true;
-    std::vector<CGScalar> ax(input.size()), ay(output.size());
+    std::vector<ADCGScalar> ax(input.size()), ay(output.size());
     for (size_t i = 0; i < input.size(); ++i) {
-      ax[i] = CGScalar(input[i]);
+      ax[i] = ADCGScalar(input[i]);
     }
     functor(ax, ay);
     CodeGenData<BaseScalar>::is_dry_run = false;
@@ -157,7 +158,7 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
     trace.ax.resize(trace.input_dim);
     trace.ay.resize(trace.output_dim);
     for (size_t i = 0; i < trace.input_dim; ++i) {
-      trace.ax[i] = CGScalar(trace.trace_input[i]);
+      trace.ax[i] = ADCGScalar(trace.trace_input[i]);
     }
     CppAD::Independent(trace.ax);
     trace.functor(trace.ax, trace.ay);
@@ -169,10 +170,10 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
   // finally, trace the top-level function
   FunctionTrace<BaseScalar> trace;
   trace.name = name;
-  std::vector<CGScalar> ax(input.size()), ay(output.size());
+  std::vector<ADCGScalar> ax(input.size()), ay(output.size());
   std::cout << "Tracing function \"" << name << "\" for code generation...\n";
   for (size_t i = 0; i < input.size(); ++i) {
-    ax[i] = CGScalar(input[i]);
+    ax[i] = ADCGScalar(input[i]);
   }
   CppAD::Independent(ax);
   functor(ax, ay);

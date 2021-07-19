@@ -1,6 +1,7 @@
 #pragma once
 
 // clang-format off
+#include <vector>
 #include <functional>
 #include "base.hpp"
 // clang-format on
@@ -13,11 +14,11 @@ class GeneratedNumerical : public GeneratedBase {
   using ADScalar = double;
 
  private:
-  Functor functor_;  
+  Functor functor_;
 
-  protected:
-  using GeneratedBase::local_input_dim_;
+ protected:
   using GeneratedBase::global_input_dim_;
+  using GeneratedBase::local_input_dim_;
   using GeneratedBase::output_dim_;
 
  public:
@@ -86,7 +87,6 @@ class GeneratedNumerical : public GeneratedBase {
                 std::vector<std::vector<BaseScalar>> &outputs,
                 const std::vector<BaseScalar> &global_input = {}) override {
     outputs.resize(local_inputs.size());
-    conditionally_compile(local_inputs, outputs, global_input);
 
     if (global_input.empty()) {
       for (size_t i = 0; i < local_inputs.size(); ++i) {
@@ -105,3 +105,4 @@ class GeneratedNumerical : public GeneratedBase {
     return;
   }
 };
+}  // namespace autogen

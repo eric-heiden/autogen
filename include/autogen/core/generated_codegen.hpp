@@ -35,8 +35,6 @@ class GeneratedCodeGen : public GeneratedBase {
 
   typedef std::unique_ptr<CppAD::cg::GenericModel<BaseScalar>> GenericModelPtr;
 
-  bool compile_in_background{false};
-
   int num_gpu_threads_per_block{32};
 
   /**
@@ -53,9 +51,6 @@ class GeneratedCodeGen : public GeneratedBase {
   using GeneratedBase::output_dim_;
 
   AccumulationMethod jac_acc_method_{ACCUMULATE_NONE};
-
-  mutable std::mutex compilation_mutex_;
-  bool is_compiling_{false};
 
   // name of the compiled library
   std::string library_name_;
@@ -75,10 +70,9 @@ class GeneratedCodeGen : public GeneratedBase {
 
   // discards the compiled library (so that it gets recompiled at the next
   // evaluation)
-  void discard_library() {
-    std::lock_guard<std::mutex> guard(compilation_mutex_);
-    library_name_ = "";
-  }
+  void discard_library() { library_name_ = ""; }
+
+  bool is_compiled() const { return !library_name_.empty(); }
 
   void operator()(const std::vector<BaseScalar> &input,
                   std::vector<BaseScalar> &output) override {
@@ -312,7 +306,6 @@ class GeneratedCodeGen : public GeneratedBase {
     cuda_proc.save_sources();
     cuda_proc.create_library();
 
-    std::lock_guard<std::mutex> guard(compilation_mutex_);
     library_name_ = name_ + "_cuda";
 
     for (auto *model : models) {

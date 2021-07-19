@@ -220,7 +220,7 @@ class CudaLibraryProcessor {
     cmd << "\"" << nvcc_path_ << "\" ";
     cmd << "--ptxas-options=-O" << std::to_string(optimization_level_) << ",-v ";
     cmd << "--ptxas-options=-v "
-        << "-rdc=true -dc ";
+        << "-rdc=true ";
     // if (debug_mode_) {
     //   cmd << "-G ";
     // }
