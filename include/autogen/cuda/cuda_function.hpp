@@ -118,7 +118,7 @@ struct CudaFunction {
       std::cerr << "GPU memory for function \"" << function_name
                 << "\" has been previously allocated for "
                 << last_allocation_threads_
-                << ". Automatically deallocating memory first...\n";
+                << " thread(s). Automatically deallocating memory first...\n";
       deallocate();
     }
     allocate_(num_total_threads);
