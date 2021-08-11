@@ -10,11 +10,11 @@ class Mode(Enum):
     NUMERICAL = 1
     CPPAD = 2
     CPU = 3
-    GPU = 4
+    CUDA = 4
 
 
 class Scope:
-    def __init__(self, mode: Mode) -> None:
+    def __init__(self, mode: Mode):
         self.mode = mode
 
 
@@ -64,13 +64,32 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
     Scalar = scalar_type()
     Vector = vector_type()
 
-    ad_x = Vector([Scalar(x) for x in xs])
+    CodeGenData.clear()
 
+    print("Dry run...")
+    # first, a "dry run" to discover the atomic functions
+    CodeGenData.set_dry_run(True)
+
+    ad_x = Vector([Scalar(x) for x in xs])
     independent(ad_x)
-    for i in range(len(xs)):
-        xs[i] = ad_x[i]
-    ys = fun(xs)
-    ad_y = Vector(list(ys))
+    # for i in range(len(xs)):
+        # xs[i] = ad_x[i]
+    ys = fun(ad_x)
+
+    CodeGenData.set_dry_run(False)
+
+    print('The following atomic functions were discovered: [%s]' % ', '.join(CodeGenData.invocation_order))
+
+    
+    print("Final run...")
+    # trace top-level function where the CGAtomicFunBridges are used
+    ad_x = Vector([Scalar(x) for x in xs])
+    independent(ad_x)
+    # for i in range(len(xs)):
+        # xs[i] = ad_x[i]
+    ys = fun(ad_x)
+
+    ad_y = Vector([Scalar(y) for y in ys])
     if mode == Mode.NUMERICAL:
         raise NotImplementedError("finite diff functor not yet implemented")
     if mode == Mode.CPPAD:

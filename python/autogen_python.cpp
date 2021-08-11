@@ -1,29 +1,24 @@
 #include <pybind11/functional.h>
+#include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
 
 #include <cppad/utility/thread_alloc.hpp>
 
 #include "autogen/autogen.hpp"
+#include "autogen/core/base.hpp"
 #include "common.hpp"
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
 
 namespace py = pybind11;
+using namespace autogen;
 
 PYBIND11_MAKE_OPAQUE(ADVector);
 PYBIND11_MAKE_OPAQUE(ADCGVector);
 PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADFun>);
 PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADCGFun>);
-
-template <typename Scalar>
-struct my_traceable_function2 {
-  Scalar operator()(const Scalar& x) const {
-    using std::cos;
-    return cos(x) * x;
-  }
-};
 
 PYBIND11_MODULE(_autogen, m) {
   m.doc() = R"pbdoc(
@@ -70,35 +65,59 @@ PYBIND11_MODULE(_autogen, m) {
             return f->Jacobian(x);
           },
           "Evaluates the Jacobian of the function")
-      //      .def("to_json", &ADFun::to_json,
-      //           "Represents the traced function by a JSON string")
-      ;
+      .def_property_readonly(
+          "input_dim",
+          [](const std::shared_ptr<ADCGFun>& fun) { return fun->Domain(); })
+      .def_property_readonly(
+          "output_dim",
+          [](const std::shared_ptr<ADCGFun>& fun) { return fun->Range(); });
+  // .def("to_json", &ADFun::to_json,
+  //      "Represents the traced function by a JSON string");
 
   m.def("independent", [](ADVector& x) {
     CppAD::Independent(x);
     // XXX save tape table for thread 0
     py::set_shared_data("tape_table_ad", ADScalar::tape_table[0]);
+    // py::set_shared_data("traces", &CodeGenData<BaseScalar>::traces);
+    // py::set_shared_data("is_dry_run", &CodeGenData<BaseScalar>::is_dry_run);
+    // py::set_shared_data("call_hierarchy",
+    // &CodeGenData<BaseScalar>::call_hierarchy);
+    // py::set_shared_data("invocation_order",
+    // CodeGenData<BaseScalar>::invocation_order);
   });
 
   // For ADCGScalar
   py::class_<std::shared_ptr<ADCGFun>>(m, "ADCGFun")
       .def(py::init([](const ADCGVector& x, const ADCGVector& y) {
         return std::make_shared<ADCGFun>(x, y);
-      }));
+      }))
+      .def_property_readonly(
+          "input_dim",
+          [](const std::shared_ptr<ADCGFun>& fun) { return fun->Domain(); })
+      .def_property_readonly(
+          "output_dim",
+          [](const std::shared_ptr<ADCGFun>& fun) { return fun->Range(); });
 
   m.def("independent", [](ADCGVector& x) {
     CppAD::Independent(x);
     // XXX save tape table for thread 0
     py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
-  });
+    py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
+    std::cout << "tape_id_table: " << ADCGScalar::tape_id_table[0] << std::endl;
+    py::set_shared_data("atomic_index_infos", ADCGScalar::atomic_index_infos);
+    py::set_shared_data("traces", CodeGenData<BaseScalar>::traces);
+    py::set_shared_data("is_dry_run", &CodeGenData<BaseScalar>::is_dry_run);
+    py::set_shared_data("call_hierarchy",
+                        &CodeGenData<BaseScalar>::call_hierarchy);
 
-  // py::class_<autogen::GeneratedLightWeight<double>>(m, "Autogen")
-  //     .def(py::init<const std::string&, std::shared_ptr<ADFun>>())
-  //      .def(py::init([](const std::string& name, std::shared_ptr<ADFun>
-  //      fun) {
-  //        return autogen::GeneratedLightWeight<double>(name, fun);
-  //      }))
-  //  ;
+    std::cout << "when calling independent: ";
+    print_invocation_order();
+
+    py::set_shared_data("invocation_order",
+                        CodeGenData<BaseScalar>::invocation_order);
+    std::cout << "ADCG Atomic index infos has "
+              << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+  });
 
   py::class_<autogen::GeneratedCppAD>(m, "GeneratedCppAD")
       .def(py::init<std::shared_ptr<ADFun>>())
@@ -107,52 +126,205 @@ PYBIND11_MODULE(_autogen, m) {
       }))
       .def(
           "forward",
-          [](autogen::GeneratedCppAD& gen, const std::vector<double>& input) {
-            std::vector<double> output;
+          [](autogen::GeneratedCppAD& gen,
+             const std::vector<BaseScalar>& input) {
+            std::vector<BaseScalar> output;
             gen(input, output);
             return output;
           },
           "Evaluates the zero-order forward pass of the function")
       .def(
+          "forward",
+          [](autogen::GeneratedCppAD& gen,
+             const std::vector<std::vector<BaseScalar>>& local_inputs,
+             const std::vector<BaseScalar>& global_input) {
+            std::vector<std::vector<BaseScalar>> outputs;
+            gen(local_inputs, outputs, global_input);
+            return outputs;
+          },
+          "Evaluates the zero-order forward pass of the function")
+      // .def(
+      //     "forward",
+      //     [](autogen::GeneratedCppAD& gen,
+      //        const py::array_t<BaseScalar>& local_inputs,
+      //        const std::vector<BaseScalar>& global_input) {
+      //       std::vector<std::vector<BaseScalar>> lps(
+      //           local_inputs.shape(0),
+      //           std::vector<BaseScalar>(local_inputs.shape(1)));
+      //       std::vector<std::vector<BaseScalar>> outputs;
+      //       const BaseScalar* data = local_inputs.data();
+      //       for (int i = 0; i < local_inputs.shape(0); ++i) {
+      //         for (int j = 0; j < local_inputs.shape(1); ++j) {
+      //           lps[i][j] = *data;
+      //           data++;;
+      //         }
+      //       }
+      //       gen(lps, outputs, global_input);
+      //       return outputs;
+      //     },
+      //     "Evaluates the zero-order forward pass of the function")
+      .def(
           "jacobian",
-          [](autogen::GeneratedCppAD& gen, const std::vector<double>& input) {
-            std::vector<double> output;
+          [](autogen::GeneratedCppAD& gen,
+             const std::vector<BaseScalar>& input) {
+            std::vector<BaseScalar> output;
             gen.jacobian(input, output);
             return output;
           },
-          "Evaluates the Jacobian of the function");
-  ;
+          "Evaluates the Jacobian of the function")
+      .def(
+          "jacobian",
+          [](autogen::GeneratedCppAD& gen,
+             const std::vector<std::vector<BaseScalar>>& local_inputs,
+             const std::vector<BaseScalar>& global_input) {
+            std::vector<std::vector<BaseScalar>> outputs;
+            gen.jacobian(local_inputs, outputs, global_input);
+            return outputs;
+          },
+          "Evaluates the Jacobian of the function")
+      .def_property_readonly("local_input_dim",
+                             &autogen::GeneratedCppAD::local_input_dim)
+      .def_property_readonly("output_dim", &autogen::GeneratedCppAD::output_dim)
+      .def_property("global_input_dim",
+                    &autogen::GeneratedCppAD::global_input_dim,
+                    &autogen::GeneratedCppAD::set_global_input_dim);
 
   py::class_<autogen::GeneratedCodeGen,
              std::shared_ptr<autogen::GeneratedCodeGen>>(m, "GeneratedCodeGen")
       .def(py::init<const std::string&, std::shared_ptr<ADCGFun>>())
       .def(
           "forward",
-          [](autogen::GeneratedCodeGen& gen, const std::vector<double>& input) {
-            std::vector<double> output;
+          [](autogen::GeneratedCodeGen& gen,
+             const std::vector<BaseScalar>& input) {
+            std::vector<BaseScalar> output;
+            if (input.size() != gen.input_dim()) {
+              throw std::runtime_error(
+                  "Input vector to function " + gen.library_name() +
+                  " has to be of dimension " + std::to_string(gen.input_dim()) +
+                  ". Provided was a vector of dimension " +
+                  std::to_string(input.size()) + ".");
+            }
             gen(input, output);
             return output;
           },
           "Evaluates the zero-order forward pass of the function")
       .def(
+          "forward",
+          [](autogen::GeneratedCodeGen& gen,
+             const std::vector<std::vector<BaseScalar>>& local_inputs,
+             const std::vector<BaseScalar>& global_input) {
+            std::vector<std::vector<BaseScalar>> outputs;
+            if (!local_inputs.empty() &&
+                local_inputs[0].size() != gen.local_input_dim()) {
+              throw std::runtime_error(
+                  "Local input vector to function " + gen.library_name() +
+                  " has to be of dimension " +
+                  std::to_string(gen.local_input_dim()) +
+                  ". Provided was a vector of dimension " +
+                  std::to_string(local_inputs[0].size()) + ".");
+            }
+            if (global_input.size() != gen.global_input_dim()) {
+              throw std::runtime_error(
+                  "Global input vector to function " + gen.library_name() +
+                  " has to be of dimension " +
+                  std::to_string(gen.global_input_dim()) +
+                  ". Provided was a vector of dimension " +
+                  std::to_string(global_input.size()) + ".");
+            }
+            gen(local_inputs, outputs, global_input);
+            return outputs;
+          },
+          "Evaluates the zero-order forward pass of the function")
+      .def(
           "jacobian",
-          [](autogen::GeneratedCodeGen& gen, const std::vector<double>& input) {
-            std::vector<double> output;
+          [](autogen::GeneratedCodeGen& gen,
+             const std::vector<BaseScalar>& input) {
+            std::vector<BaseScalar> output;
+            if (input.size() != gen.input_dim()) {
+              throw std::runtime_error(
+                  "Input vector to function " + gen.library_name() +
+                  " has to be of dimension " + std::to_string(gen.input_dim()) +
+                  ". Provided was a vector of dimension " +
+                  std::to_string(input.size()) + ".");
+            }
             gen.jacobian(input, output);
             return output;
+          },
+          "Evaluates the Jacobian of the function")
+      .def(
+          "jacobian",
+          [](autogen::GeneratedCodeGen& gen,
+             const std::vector<std::vector<BaseScalar>>& local_inputs,
+             const std::vector<BaseScalar>& global_input) {
+            std::vector<std::vector<BaseScalar>> outputs;
+            if (!local_inputs.empty() &&
+                local_inputs[0].size() != gen.local_input_dim()) {
+              throw std::runtime_error(
+                  "Local input vector to function " + gen.library_name() +
+                  " has to be of dimension " +
+                  std::to_string(gen.local_input_dim()) +
+                  ". Provided was a vector of dimension " +
+                  std::to_string(local_inputs[0].size()) + ".");
+            }
+            if (global_input.size() != gen.global_input_dim()) {
+              throw std::runtime_error(
+                  "Global input vector to function " + gen.library_name() +
+                  " has to be of dimension " +
+                  std::to_string(gen.global_input_dim()) +
+                  ". Provided was a vector of dimension " +
+                  std::to_string(global_input.size()) + ".");
+            }
+            gen.jacobian(local_inputs, outputs, global_input);
+            return outputs;
           },
           "Evaluates the Jacobian of the function")
       .def("compile_cpu", &autogen::GeneratedCodeGen::compile_cpu,
            "Compile to a CPU-bound shared library")
       .def("compile_cuda", &autogen::GeneratedCodeGen::compile_cuda,
-           "Compile to a GPU-bound shared library");
+           "Compile to a GPU-bound shared library")
+      .def_property_readonly("local_input_dim",
+                             &autogen::GeneratedCodeGen::local_input_dim)
+      .def_property_readonly("output_dim",
+                             &autogen::GeneratedCodeGen::output_dim)
+      .def_property_readonly("input_dim", &autogen::GeneratedCodeGen::input_dim)
+      .def_property("global_input_dim",
+                    &autogen::GeneratedCodeGen::global_input_dim,
+                    &autogen::GeneratedCodeGen::set_global_input_dim)
+      .def_property_readonly("is_compiled",
+                             &autogen::GeneratedCodeGen::is_compiled)
+      .def("discard_library", &autogen::GeneratedCodeGen::discard_library)
+      .def_property("library_name", &autogen::GeneratedCodeGen::library_name,
+                    &autogen::GeneratedCodeGen::load_precompiled_library);
 
-  publish_function<my_traceable_function2> pub;
-  pub(m, "my_traceable_function2");
+  py::class_<CodeGenData<BaseScalar>>(m, "CodeGenData")
+      .def_static("clear", &CodeGenData<BaseScalar>::clear)
+      .def_static("set_dry_run",
+                  [](bool dry_run) {
+                    CodeGenData<BaseScalar>::is_dry_run = dry_run;
+                    std::cout << "Setting dry run to " << std::boolalpha
+                              << CodeGenData<BaseScalar>::is_dry_run << "\n";
+                  })
+      .def_readwrite_static("invocation_order",
+                            &CodeGenData<BaseScalar>::invocation_order)
+      .def_static("register_trace", [](const std::string& name,
+                                       const std::shared_ptr<ADCGFun>& tape) {
+        using CGAtomicFunBridge =
+            typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
+        FunctionTrace<BaseScalar>& trace =
+            (*CodeGenData<BaseScalar>::traces)[name];
+        std::cout << "Adding trace for atomic function \"" << trace.name
+                  << "\"...\n";
+        trace.tape = tape;
+        trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
+        trace.input_dim = tape->Domain();
+        trace.output_dim = tape->Range();
+        ;
+      });
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
 #else
   m.attr("__version__") = "dev";
+  ;
 #endif
 }

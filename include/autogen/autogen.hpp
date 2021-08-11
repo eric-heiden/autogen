@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 // clang-format off
 #include "core/codegen.hpp"
 #include "core/base.hpp"
@@ -92,7 +94,9 @@ struct Generated {
     }
   }
 
-  AccumulationMethod jacobian_acc_method() const { return jac_acc_method_; }
+  AccumulationMethod jacobian_acc_method() const {
+    return this->jac_acc_method_;
+  }
   void set_jacobian_acc_method(AccumulationMethod jac_acc_method) {
     if (jac_acc_method != this->jac_acc_method_) {
       // changing the jac_acc_method discards the previously compiled library
@@ -104,6 +108,13 @@ struct Generated {
   size_t input_dim() const { return local_input_dim_ + global_input_dim_; }
   size_t local_input_dim() const { return local_input_dim_; }
   size_t output_dim() const { return output_dim_; }
+
+  bool debug_mode() const { return gen_cg_ && gen_cg_->debug_mode; }
+  void set_debug_mode(bool debug_mode = true) {
+    if (gen_cg_) {
+      gen_cg_->debug_mode = debug_mode;
+    }
+  }
 
   size_t global_input_dim() const { return global_input_dim_; }
   void set_global_input_dim(size_t global_input_dim) {
@@ -130,24 +141,6 @@ struct Generated {
     //    std::lock_guard<std::mutex> guard(compilation_mutex_);
     //    return is_compiling_;
     return false;
-  }
-
-  void compile(const FunctionTrace<BaseScalar>& main_trace) {
-    {
-      // std::lock_guard<std::mutex> guard(compilation_mutex_);
-      is_compiling_ = true;
-    }
-
-    if (mode_ == GENERATE_CPU) {
-      gen_cg_->compile_cpu();
-    } else if (mode_ == GENERATE_CUDA) {
-      gen_cg_->compile_cuda();
-    }
-
-    {
-      // std::lock_guard<std::mutex> guard(compilation_mutex_);
-      is_compiling_ = false;
-    }
   }
 
   void operator()(const std::vector<BaseScalar>& input,
@@ -233,6 +226,27 @@ struct Generated {
   }
 
  protected:
+  void compile(const FunctionTrace<BaseScalar>& main_trace) {
+    {
+      // std::lock_guard<std::mutex> guard(compilation_mutex_);
+      is_compiling_ = true;
+    }
+
+    gen_cg_->local_input_dim_ = this->local_input_dim_;
+    gen_cg_->global_input_dim_ = this->global_input_dim_;
+    gen_cg_->output_dim_ = this->output_dim_;
+    if (mode_ == GENERATE_CPU) {
+      gen_cg_->compile_cpu();
+    } else if (mode_ == GENERATE_CUDA) {
+      gen_cg_->compile_cuda();
+    }
+
+    {
+      // std::lock_guard<std::mutex> guard(compilation_mutex_);
+      is_compiling_ = false;
+    }
+  }
+
   void conditionally_compile(const std::vector<BaseScalar>& input,
                              std::vector<BaseScalar>& output) {
     if (input_dim() == 0 || output_dim() == 0) {
