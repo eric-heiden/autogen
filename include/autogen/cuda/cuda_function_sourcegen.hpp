@@ -3,15 +3,10 @@
 #include <regex>
 #include <unordered_map>
 
+#include "autogen/core/base.hpp"
 #include "cuda_language.hpp"
 
 namespace autogen {
-enum AccumulationMethod {
-  ACCUMULATE_NONE,
-  ACCUMULATE_SUM,
-  ACCUMULATE_MEAN
-};
-
 struct CudaFunctionSourceGen {
   std::string function_name;
   size_t local_input_dim;
@@ -149,9 +144,8 @@ struct CudaFunctionSourceGen {
 
     std::string body_str = body.str();
 
-    // std::cout << "Replacing variables in function " << function_name << "...\n";
-    // size_t consts = replace_constants(body_str);
-    // if (consts > 0) {
+    // std::cout << "Replacing variables in function " << function_name <<
+    // "...\n"; size_t consts = replace_constants(body_str); if (consts > 0) {
     //   std::cout << "Introduced " << consts << " constant variable[s].\n";
     // }
     code << body_str;
@@ -191,7 +185,9 @@ struct CudaFunctionSourceGen {
     // global device memory pointers
     code << "Float* dev_" << function_name << "_output = nullptr;\n";
     code << "Float* dev_" << function_name << "_local_input = nullptr;\n";
-    code << "Float* dev_" << function_name << "_global_input = nullptr;\n\n";
+    if (global_input_dim > 0) {
+      code << "Float* dev_" << function_name << "_global_input = nullptr;\n\n";
+    }
 
     // allocation function
     code << "extern \"C\" {\nMODULE_API void " << function_name
@@ -205,15 +201,19 @@ struct CudaFunctionSourceGen {
     code << "  allocate((void**)&dev_" << function_name
          << "_local_input, input_dim * "
             "sizeof(Float));\n";
-    code << "  allocate((void**)&dev_" << function_name << "_global_input, "
-         << global_input_dim << " * sizeof(Float));\n";
+    if (global_input_dim > 0) {
+      code << "  allocate((void**)&dev_" << function_name << "_global_input, "
+           << global_input_dim << " * sizeof(Float));\n";
+    }
     code << "}\n\n";
 
     // deallocation function
     code << "MODULE_API void " << function_name << "_deallocate() {\n";
     code << "  cudaFreeHost(dev_" << function_name << "_output);\n";
     code << "  cudaFreeHost(dev_" << function_name << "_local_input);\n";
-    code << "  cudaFreeHost(dev_" << function_name << "_global_input);\n";
+    if (global_input_dim > 0) {
+      code << "  cudaFreeHost(dev_" << function_name << "_global_input);\n";
+    }
     code << "  // cudaDeviceReset();\n";
     code << "}\n\n";
   }
@@ -242,22 +242,24 @@ struct CudaFunctionSourceGen {
 )";
     code << "  return true;\n}\n\n";
 
-    // send global input to GPU
-    code << "MODULE_API bool " + function_name + "_send_global(";
-    code << "const Float *input) {\n";
-    code << "  cudaError status = cudaMemcpy(dev_" << function_name
-         << "_global_input, input, " << global_input_dim
-         << " * sizeof(Float), "
-            "cudaMemcpyHostToDevice);\n";
-    code << R"(  if (status != cudaSuccess) {
+    if (global_input_dim > 0) {
+      // send global input to GPU
+      code << "MODULE_API bool " + function_name + "_send_global(";
+      code << "const Float *input) {\n";
+      code << "  cudaError status = cudaMemcpy(dev_" << function_name
+           << "_global_input, input, " << global_input_dim
+           << " * sizeof(Float), "
+              "cudaMemcpyHostToDevice);\n";
+      code << R"(  if (status != cudaSuccess) {
     fprintf(stderr, "Error %i (%s) in function \")"
-         << function_name
-         << R"(\" while sending global input data to GPU: %s.\n",
+           << function_name
+           << R"(\" while sending global input data to GPU: %s.\n",
             status, cudaGetErrorName(status), cudaGetErrorString(status));
     return false;
   }
 )";
-    code << "  return true;\n}\n\n";
+      code << "  return true;\n}\n\n";
+    }
   }
 
   void emit_kernel_launch(std::ostringstream &code) const {

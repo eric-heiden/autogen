@@ -218,9 +218,9 @@ class CudaLibraryProcessor {
     std::stringstream cmd;
     std::cout << "Compiling CUDA library via " << nvcc_path_ << std::endl;
     cmd << "\"" << nvcc_path_ << "\" ";
-    // cmd << "--ptxas-options=-O" << std::to_string(optimization_level_) << ",-v ";
-    cmd << "--ptxas-options=-v ";
-        // << "-rdc=true ";
+    cmd << "--ptxas-options=-O" << std::to_string(optimization_level_) << ",-v ";
+    cmd << "--ptxas-options=-v "
+        << "-rdc=true ";
     // if (debug_mode_) {
     //   cmd << "-G ";
     // }
@@ -279,8 +279,8 @@ struct CudaFunctionMetaData {
 void allocate(void **x, size_t size) {
   cudaError status = cudaMallocHost(x, size);
   if (status != cudaSuccess) {
-    fprintf(stderr, "Error %i (%s) while allocating CUDA memory: %s.\n",
-            status, cudaGetErrorName(status), cudaGetErrorString(status));
+    fprintf(stderr, "Error %i (%s) while allocating %zu units of CUDA memory: %s.\n",
+            status, cudaGetErrorName(status), size, cudaGetErrorString(status));
     exit((int)status);
   }
 }

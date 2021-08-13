@@ -131,3 +131,10 @@ dmypy.json
 .history
 .vscode
 .vs
+
+*srcs/
+*.dll
+*.so
+*.exp
+*.lib
+*.a

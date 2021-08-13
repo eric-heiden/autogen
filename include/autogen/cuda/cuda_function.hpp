@@ -94,8 +94,11 @@ struct CudaFunction {
           function_name + "_allocate", lib_handle);
       deallocate_ = load_function<DeallocateFunctionPtrT>(
           function_name + "_deallocate", lib_handle);
-      send_global_fun_ = load_function<SendGlobalFunctionPtrT<Scalar>>(
-          function_name + "_send_global", lib_handle);
+      try {
+        send_global_fun_ = load_function<SendGlobalFunctionPtrT<Scalar>>(
+            function_name + "_send_global", lib_handle);
+      } catch (...) {
+      }
       send_local_fun_ = load_function<SendLocalFunctionPtrT<Scalar>>(
           function_name + "_send_local", lib_handle);
     }
@@ -115,7 +118,7 @@ struct CudaFunction {
       std::cerr << "GPU memory for function \"" << function_name
                 << "\" has been previously allocated for "
                 << last_allocation_threads_
-                << ". Automatically deallocating memory first...\n";
+                << " thread(s). Automatically deallocating memory first...\n";
       deallocate();
     }
     allocate_(num_total_threads);
@@ -144,8 +147,10 @@ struct CudaFunction {
     allocate(num_total_threads);
     assert(fun_);
     bool status;
-    status = send_global_input(input);
-    assert(status);
+    if (send_global_fun_) {
+      status = send_global_input(input);
+      assert(status);
+    }
     if (!status) {
       return false;
     }
@@ -168,10 +173,12 @@ struct CudaFunction {
     assert(fun_);
     bool status;
     const Scalar *input_data = input.data();
-    status = send_global_input(input_data);
-    assert(status);
-    if (!status) {
-      return false;
+    if (send_global_fun_) {
+      status = send_global_input(input_data);
+      assert(status);
+      if (!status) {
+        return false;
+      }
     }
     status = send_local_input(1, &(input_data[meta_data_.global_input_dim]));
     assert(status);
