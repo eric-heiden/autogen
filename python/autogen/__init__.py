@@ -9,8 +9,7 @@ __AUTOGEN_SCOPE__ = None
 class Mode(Enum):
     NUMERICAL = 1
     CPPAD = 2
-    CPU = 3
-    CUDA = 4
+    CODEGEN = 3
 
 
 class Scope:
@@ -52,6 +51,25 @@ def vector_type():
     if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
         return ADVector
     return ADCGVector
+
+
+def call_atomic(name: str, function, input):
+    if __AUTOGEN_SCOPE__.mode != Mode.CODEGEN:
+        return function(input)
+
+    if not CodeGenData.has_trace(name):
+        CodeGenData.update_call_hierarchy(name)
+
+        ad_x = ADCGVector([ADCGScalar(to_double(x)) for x in input])
+        independent(ad_x)
+        ys = function(ad_x)
+        ad_y = ADCGVector([ADCGScalar(y) for y in ys])
+
+        tape = ADCGFun(ad_x, ad_y)
+        CodeGenData.register_trace(name, tape)
+        return ad_y
+
+    return CodeGenData.call_bridge(name, ADCGVector(input))
 
 
 def trace(fun, xs, mode: Mode = Mode.CPPAD):

@@ -8,8 +8,9 @@
 #endif
 
 #include "base.hpp"
+#include "types.h"
 
-#define DEBUG 1
+// #define DEBUG 1
 
 namespace autogen {
 template <typename BaseScalar>

@@ -34,19 +34,22 @@ PYBIND11_MODULE(_autogen, m) {
   py::bind_vector<ADVector>(m, "ADVector");
   py::bind_vector<ADCGVector>(m, "ADCGVector");
 
-  expose_scalar<ADScalar>(m, "ADScalar")
-      .def("__repr__",
-           [](const ADScalar& s) {
-             return "ad<" + std::to_string(CppAD::Value(CppAD::Var2Par(s))) +
-                    ">";
-           })
-      .def("value",
-           [](const ADScalar& s) { return CppAD::Value(CppAD::Var2Par(s)); });
+  expose_scalar<ADScalar>(m, "ADScalar").def("__repr__", [](const ADScalar& s) {
+    return "ad<" + std::to_string(CppAD::Value(CppAD::Var2Par(s))) + ">";
+  });
   expose_scalar<ADCGScalar>(m, "ADCGScalar")
       .def("__repr__", [](const ADCGScalar& s) {
         return "adcg<" +
                std::to_string(CppAD::Value(CppAD::Var2Par(s)).getValue()) + ">";
       });
+
+  m.def("to_double", [](double d) -> double { return d; });
+  m.def("to_double", [](const ADScalar& s) -> double {
+    return CppAD::Value(CppAD::Var2Par(s));
+  });
+  m.def("to_double", [](const ADCGScalar& s) -> double {
+    return CppAD::Value(CppAD::Var2Par(s)).getValue();
+  });
 
   // For CppADScalar
   py::class_<std::shared_ptr<ADFun>>(m, "ADFun")
@@ -298,6 +301,25 @@ PYBIND11_MODULE(_autogen, m) {
 
   py::class_<CodeGenData<BaseScalar>>(m, "CodeGenData")
       .def_static("clear", &CodeGenData<BaseScalar>::clear)
+      .def_static("has_trace",
+                  [](const std::string& name) {
+                    return CodeGenData<BaseScalar>::traces->find(name) != CodeGenData<BaseScalar>::traces->end();
+                  })
+      .def_static("update_call_hierarchy",
+                  [](const std::string& name) {
+                    auto& order = *CodeGenData<BaseScalar>::invocation_order;
+                    if (!order.empty()) {
+                      // the current function is called by another function,
+                      // hence update the call hierarchy
+                      const std::string& parent = order.back();
+                      auto& hierarchy = CodeGenData<BaseScalar>::call_hierarchy;
+                      if (hierarchy.find(parent) == hierarchy.end()) {
+                        hierarchy[parent] = std::vector<std::string>();
+                      }
+                      hierarchy[parent].push_back(name);
+                    }
+                    order.push_back(name);
+                  })
       .def_static("set_dry_run",
                   [](bool dry_run) {
                     CodeGenData<BaseScalar>::is_dry_run = dry_run;
@@ -306,19 +328,35 @@ PYBIND11_MODULE(_autogen, m) {
                   })
       .def_readwrite_static("invocation_order",
                             &CodeGenData<BaseScalar>::invocation_order)
-      .def_static("register_trace", [](const std::string& name,
-                                       const std::shared_ptr<ADCGFun>& tape) {
-        using CGAtomicFunBridge =
-            typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
+      .def_readwrite_static("call_hierarchy",
+                            &CodeGenData<BaseScalar>::call_hierarchy)
+      .def_static(
+          "register_trace",
+          [](const std::string& name, const std::shared_ptr<ADCGFun>& tape) {
+            using CGAtomicFunBridge =
+                typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
+            FunctionTrace<BaseScalar>& trace =
+                (*CodeGenData<BaseScalar>::traces)[name];
+            std::cout << "Adding trace for atomic function \"" << trace.name
+                      << "\"...\n";
+            trace.tape = tape;
+            trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
+            trace.input_dim = tape->Domain();
+            trace.output_dim = tape->Range();
+          })
+      .def_static("call_bridge", [](const std::string& name,
+                                    const ADCGVector& input) {
+        if (CodeGenData<BaseScalar>::traces->find(name) ==
+            CodeGenData<BaseScalar>::traces->end()) {
+          throw std::runtime_error(
+              "Could not find trace with name \"" + name +
+              "\" while attempting to call the corresponding function bridge.");
+        }
         FunctionTrace<BaseScalar>& trace =
             (*CodeGenData<BaseScalar>::traces)[name];
-        std::cout << "Adding trace for atomic function \"" << trace.name
-                  << "\"...\n";
-        trace.tape = tape;
-        trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
-        trace.input_dim = tape->Domain();
-        trace.output_dim = tape->Range();
-        ;
+        ADCGVector output(trace.output_dim);
+        (*(trace.bridge))(input, output);
+        return output;
       });
 
 #ifdef VERSION_INFO

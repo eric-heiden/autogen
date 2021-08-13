@@ -9,16 +9,7 @@
 #include "autogen/autogen.hpp"
 
 namespace py = pybind11;
-
-using ADScalar = typename CppAD::AD<double>;
-using CGScalar = typename CppAD::cg::CG<double>;
-using ADCGScalar = typename CppAD::AD<CGScalar>;
-
-using ADVector = std::vector<ADScalar>;
-using ADCGVector = std::vector<ADCGScalar>;
-
-using ADFun = typename CppAD::ADFun<double>;
-using ADCGFun = typename CppAD::ADFun<CGScalar>;
+using namespace autogen;
 
 template <typename Scalar>
 py::class_<Scalar, std::shared_ptr<Scalar>> expose_scalar(py::handle m,
