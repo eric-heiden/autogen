@@ -1,60 +1,40 @@
 from typing import Callable
 from _autogen import *
-from enum import Enum
-
-# keeps track of the current autogen mode and other meta information
-__AUTOGEN_SCOPE__ = None
-
-
-class Mode(Enum):
-    NUMERICAL = 1
-    CPPAD = 2
-    CODEGEN = 3
-
-
-class Scope:
-    def __init__(self, mode: Mode):
-        self.mode = mode
-
 
 def scalar_type():
-    global __AUTOGEN_SCOPE__
-    if __AUTOGEN_SCOPE__ is None or __AUTOGEN_SCOPE__.mode == Mode.NUMERICAL:
+    if get_mode() == Mode.DOUBLE:
         return float
-    if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
+    if get_mode() == Mode.CPPAD:
         return ADScalar
     return ADCGScalar
 
 
-def scalar_name():
-    global __AUTOGEN_SCOPE__
-    if __AUTOGEN_SCOPE__ is None or __AUTOGEN_SCOPE__.mode == Mode.NUMERICAL:
-        return "double"
-    if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
-        return "AD"
-    return "ADCG"
-
-
 def scalar(x):
-    global __AUTOGEN_SCOPE__
-    if __AUTOGEN_SCOPE__ is None or __AUTOGEN_SCOPE__.mode == Mode.NUMERICAL:
+    if get_mode() == Mode.DOUBLE:
         return float(x)
-    if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
+    if get_mode() == Mode.CPPAD:
         return ADScalar(x)
     return ADCGScalar(x)
 
 
 def vector_type():
-    global __AUTOGEN_SCOPE__
-    if __AUTOGEN_SCOPE__ is None or __AUTOGEN_SCOPE__.mode == Mode.NUMERICAL:
+    if get_mode() == Mode.DOUBLE:
         return list
-    if __AUTOGEN_SCOPE__.mode == Mode.CPPAD:
+    if get_mode() == Mode.CPPAD:
         return ADVector
     return ADCGVector
 
 
+def vector(xs):
+    if get_mode() == Mode.DOUBLE:
+        return xs
+    if get_mode() == Mode.CPPAD:
+        return ADVector([ADScalar(x) for x in xs])
+    return ADCGVector([ADCGScalar(x) for x in xs])
+
+
 def call_atomic(name: str, function, input):
-    if __AUTOGEN_SCOPE__.mode != Mode.CODEGEN:
+    if get_mode() != Mode.CODEGEN:
         return function(input)
 
     if not CodeGenData.has_trace(name):
@@ -73,11 +53,7 @@ def call_atomic(name: str, function, input):
 
 
 def trace(fun, xs, mode: Mode = Mode.CPPAD):
-    global __AUTOGEN_SCOPE__
-    if __AUTOGEN_SCOPE__ is None:
-        __AUTOGEN_SCOPE__ = Scope(mode)
-    else:
-        __AUTOGEN_SCOPE__.mode = mode
+    set_mode(mode)
 
     Scalar = scalar_type()
     Vector = vector_type()
@@ -90,25 +66,20 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
 
     ad_x = Vector([Scalar(x) for x in xs])
     independent(ad_x)
-    # for i in range(len(xs)):
-        # xs[i] = ad_x[i]
     ys = fun(ad_x)
 
     CodeGenData.set_dry_run(False)
 
     print('The following atomic functions were discovered: [%s]' % ', '.join(CodeGenData.invocation_order))
 
-    
     print("Final run...")
     # trace top-level function where the CGAtomicFunBridges are used
     ad_x = Vector([Scalar(x) for x in xs])
     independent(ad_x)
-    # for i in range(len(xs)):
-        # xs[i] = ad_x[i]
     ys = fun(ad_x)
 
     ad_y = Vector([Scalar(y) for y in ys])
-    if mode == Mode.NUMERICAL:
+    if mode == Mode.DOUBLE:
         raise NotImplementedError("finite diff functor not yet implemented")
     if mode == Mode.CPPAD:
         return ADFun(ad_x, ad_y)

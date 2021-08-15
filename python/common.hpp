@@ -11,6 +11,22 @@
 namespace py = pybind11;
 using namespace autogen;
 
+PYBIND11_NUMPY_OBJECT_DTYPE(ADScalar);
+PYBIND11_NUMPY_OBJECT_DTYPE(ADCGScalar);
+
+struct Scope {
+  ScalarType mode{SCALAR_DOUBLE};
+};
+
+static Scope* global_scope_ = nullptr;
+
+Scope* get_scope() {
+  if (!global_scope_) {
+    global_scope_ = reinterpret_cast<Scope*>(py::get_shared_data("scope"));
+  }
+  return global_scope_;
+}
+
 template <typename Scalar>
 py::class_<Scalar, std::shared_ptr<Scalar>> expose_scalar(py::handle m,
                                                           const char* name) {
@@ -120,8 +136,8 @@ void retrieve_tape<ADCGScalar>() {
   std::cout << "Retrieving ADCGScalar tape table...\n";
   ADCGScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<CGScalar>*>(
       py::get_shared_data("tape_table_adcg"));
-  ADCGScalar::tape_id_table = reinterpret_cast<CppAD::tape_id_t*>(
-      py::get_shared_data("tape_id_table"));
+  ADCGScalar::tape_id_table =
+      reinterpret_cast<CppAD::tape_id_t*>(py::get_shared_data("tape_id_table"));
   retrieve_shared_ptr(&ADCGScalar::atomic_index_infos, "atomic_index_infos");
   // ADCGScalar::atomic_index_infos =
   //     std::shared_ptr<std::vector<CppAD::local::atomic_index_info>>(reinterpret_cast<std::vector<CppAD::local::atomic_index_info>*>(
@@ -233,3 +249,47 @@ struct publish_vec_function {
           });
   }
 };
+
+template <template <typename> typename Class, typename Scalar, typename Handle>
+struct ClassPublisher {
+  virtual void operator()(Handle& handle) const = 0;
+};
+
+template <template <typename> typename Class,
+          template <typename> typename... Parents>
+void publish_class(py::module& m, const std::string& name) {
+  using HandleDouble = typename py::class_<Class<double>, Parents<double>...>;
+  using HandleAD = typename py::class_<Class<ADScalar>, Parents<ADScalar>...>;
+  using HandleADCG =
+      typename py::class_<Class<ADCGScalar>, Parents<ADCGScalar>...>;
+  static auto handle_double = HandleDouble(m, (name + "_double").c_str());
+  static ClassPublisher<Class, double, HandleDouble> pub_double;
+  pub_double(handle_double);
+  static auto handle_ad = HandleAD(m, (name + "_ad").c_str());
+  static ClassPublisher<Class, ADScalar, HandleAD> pub_ad;
+  pub_ad(handle_ad);
+  static auto handle_adcg = HandleADCG(m, (name + "_adcg").c_str());
+  static ClassPublisher<Class, ADCGScalar, HandleADCG> pub_adcg;
+  pub_adcg(handle_adcg);
+  static auto handle_type =
+      m.def(name.c_str(), [&m, &name](py::args args, const py::kwargs& kwargs) {
+        switch (get_scope()->mode) {
+          case SCALAR_CPPAD: {
+            std::cout << "returning CppAD\n";
+            py::type type = py::type::of<Class<ADScalar>>();
+            return type(*args, **kwargs);
+          }
+          case SCALAR_CODEGEN: {
+            std::cout << "returning CodeGen\n";
+            py::type type = py::type::of<Class<ADCGScalar>>();
+            return type(*args, **kwargs);
+          }
+          case SCALAR_DOUBLE:
+          default: {
+            std::cout << "returning double\n";
+            py::type type = py::type::of<Class<double>>();
+            return type(*args, **kwargs);
+          }
+        }
+      });
+}

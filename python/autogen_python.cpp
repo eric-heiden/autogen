@@ -1,5 +1,7 @@
 #include <pybind11/functional.h>
+#include <pybind11/iostream.h>
 #include <pybind11/numpy.h>
+#include <pybind11/operators.h>
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
 
@@ -31,8 +33,21 @@ PYBIND11_MODULE(_autogen, m) {
            :toctree: _generate
     )pbdoc";
 
+  global_scope_ = new Scope;
+  py::set_shared_data("scope", global_scope_);
+  // std::cout << "Welcome to autogen!\n";
+
   py::bind_vector<ADVector>(m, "ADVector");
   py::bind_vector<ADCGVector>(m, "ADCGVector");
+
+  py::enum_<ScalarType>(m, "Mode")
+      .value("DOUBLE", ScalarType::SCALAR_DOUBLE)
+      .value("CPPAD", ScalarType::SCALAR_CPPAD)
+      .value("CODEGEN", ScalarType::SCALAR_CODEGEN)
+      .export_values();
+
+  m.def("get_mode", []() { return get_scope()->mode; });
+  m.def("set_mode", [](const ScalarType& mode) { get_scope()->mode = mode; });
 
   expose_scalar<ADScalar>(m, "ADScalar").def("__repr__", [](const ADScalar& s) {
     return "ad<" + std::to_string(CppAD::Value(CppAD::Var2Par(s))) + ">";
@@ -42,6 +57,23 @@ PYBIND11_MODULE(_autogen, m) {
         return "adcg<" +
                std::to_string(CppAD::Value(CppAD::Var2Par(s)).getValue()) + ">";
       });
+
+  // py::implicitly_convertible<double, ADScalar>();
+  // py::implicitly_convertible<int, ADScalar>();
+  // py::implicitly_convertible<double, ADCGScalar>();
+  // py::implicitly_convertible<int, ADCGScalar>();
+
+  m.def("scalar_name", []() {
+    switch (get_scope()->mode) {
+      case SCALAR_CPPAD:
+        return "AD";
+      case SCALAR_CODEGEN:
+        return "ADCG";
+      case SCALAR_DOUBLE:
+      default:
+        return "double";
+    }
+  });
 
   m.def("to_double", [](double d) -> double { return d; });
   m.def("to_double", [](const ADScalar& s) -> double {
@@ -106,7 +138,6 @@ PYBIND11_MODULE(_autogen, m) {
     // XXX save tape table for thread 0
     py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
     py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
-    std::cout << "tape_id_table: " << ADCGScalar::tape_id_table[0] << std::endl;
     py::set_shared_data("atomic_index_infos", ADCGScalar::atomic_index_infos);
     py::set_shared_data("traces", CodeGenData<BaseScalar>::traces);
     py::set_shared_data("is_dry_run", &CodeGenData<BaseScalar>::is_dry_run);
@@ -128,16 +159,17 @@ PYBIND11_MODULE(_autogen, m) {
         return autogen::GeneratedCppAD(fun);
       }))
       .def(
-          "forward",
+          "__call__",
           [](autogen::GeneratedCppAD& gen,
              const std::vector<BaseScalar>& input) {
             std::vector<BaseScalar> output;
             gen(input, output);
             return output;
           },
-          "Evaluates the zero-order forward pass of the function")
+          "Evaluates the zero-order forward pass of the function",
+          py::is_operator())
       .def(
-          "forward",
+          "__call__",
           [](autogen::GeneratedCppAD& gen,
              const std::vector<std::vector<BaseScalar>>& local_inputs,
              const std::vector<BaseScalar>& global_input) {
@@ -145,27 +177,8 @@ PYBIND11_MODULE(_autogen, m) {
             gen(local_inputs, outputs, global_input);
             return outputs;
           },
-          "Evaluates the zero-order forward pass of the function")
-      // .def(
-      //     "forward",
-      //     [](autogen::GeneratedCppAD& gen,
-      //        const py::array_t<BaseScalar>& local_inputs,
-      //        const std::vector<BaseScalar>& global_input) {
-      //       std::vector<std::vector<BaseScalar>> lps(
-      //           local_inputs.shape(0),
-      //           std::vector<BaseScalar>(local_inputs.shape(1)));
-      //       std::vector<std::vector<BaseScalar>> outputs;
-      //       const BaseScalar* data = local_inputs.data();
-      //       for (int i = 0; i < local_inputs.shape(0); ++i) {
-      //         for (int j = 0; j < local_inputs.shape(1); ++j) {
-      //           lps[i][j] = *data;
-      //           data++;;
-      //         }
-      //       }
-      //       gen(lps, outputs, global_input);
-      //       return outputs;
-      //     },
-      //     "Evaluates the zero-order forward pass of the function")
+          "Evaluates the zero-order forward pass of the function",
+          py::is_operator())
       .def(
           "jacobian",
           [](autogen::GeneratedCppAD& gen,
@@ -196,7 +209,7 @@ PYBIND11_MODULE(_autogen, m) {
              std::shared_ptr<autogen::GeneratedCodeGen>>(m, "GeneratedCodeGen")
       .def(py::init<const std::string&, std::shared_ptr<ADCGFun>>())
       .def(
-          "forward",
+          "__call__",
           [](autogen::GeneratedCodeGen& gen,
              const std::vector<BaseScalar>& input) {
             std::vector<BaseScalar> output;
@@ -210,9 +223,10 @@ PYBIND11_MODULE(_autogen, m) {
             gen(input, output);
             return output;
           },
-          "Evaluates the zero-order forward pass of the function")
+          "Evaluates the zero-order forward pass of the function",
+          py::is_operator())
       .def(
-          "forward",
+          "__call__",
           [](autogen::GeneratedCodeGen& gen,
              const std::vector<std::vector<BaseScalar>>& local_inputs,
              const std::vector<BaseScalar>& global_input) {
@@ -237,7 +251,8 @@ PYBIND11_MODULE(_autogen, m) {
             gen(local_inputs, outputs, global_input);
             return outputs;
           },
-          "Evaluates the zero-order forward pass of the function")
+          "Evaluates the zero-order forward pass of the function",
+          py::is_operator())
       .def(
           "jacobian",
           [](autogen::GeneratedCodeGen& gen,
@@ -282,9 +297,13 @@ PYBIND11_MODULE(_autogen, m) {
           },
           "Evaluates the Jacobian of the function")
       .def("compile_cpu", &autogen::GeneratedCodeGen::compile_cpu,
-           "Compile to a CPU-bound shared library")
+           "Compile to a CPU-bound shared library",
+           py::call_guard<py::scoped_ostream_redirect,
+                          py::scoped_estream_redirect>())
       .def("compile_cuda", &autogen::GeneratedCodeGen::compile_cuda,
-           "Compile to a GPU-bound shared library")
+           "Compile to a GPU-bound shared library",
+           py::call_guard<py::scoped_ostream_redirect,
+                          py::scoped_estream_redirect>())
       .def_property_readonly("local_input_dim",
                              &autogen::GeneratedCodeGen::local_input_dim)
       .def_property_readonly("output_dim",
@@ -303,7 +322,8 @@ PYBIND11_MODULE(_autogen, m) {
       .def_static("clear", &CodeGenData<BaseScalar>::clear)
       .def_static("has_trace",
                   [](const std::string& name) {
-                    return CodeGenData<BaseScalar>::traces->find(name) != CodeGenData<BaseScalar>::traces->end();
+                    return CodeGenData<BaseScalar>::traces->find(name) !=
+                           CodeGenData<BaseScalar>::traces->end();
                   })
       .def_static("update_call_hierarchy",
                   [](const std::string& name) {
@@ -363,6 +383,5 @@ PYBIND11_MODULE(_autogen, m) {
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
 #else
   m.attr("__version__") = "dev";
-  ;
 #endif
 }

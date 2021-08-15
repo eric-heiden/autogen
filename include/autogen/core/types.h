@@ -12,4 +12,6 @@ using ADCGVector = std::vector<ADCGScalar>;
 
 using ADFun = typename CppAD::ADFun<double>;
 using ADCGFun = typename CppAD::ADFun<CGScalar>;
+
+enum ScalarType { SCALAR_DOUBLE, SCALAR_CPPAD, SCALAR_CODEGEN };
 }  // namespace autogen
