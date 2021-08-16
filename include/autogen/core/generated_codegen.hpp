@@ -275,7 +275,7 @@ class GeneratedCodeGen : public GeneratedBase {
   }
 
 #if !CPPAD_CG_SYSTEM_WIN
-  inline std::mutex cpu_library_loading_mutex_{};
+  mutable std::mutex cpu_library_loading_mutex_{};
 
   GenericModelPtr &get_cpu_model() const {
     if (!cpu_library_) {
@@ -283,7 +283,7 @@ class GeneratedCodeGen : public GeneratedBase {
       cpu_library_ = std::make_shared<CppAD::cg::LinuxDynamicLib<BaseScalar>>(
           library_name_);
       // load and wire up atomic functions in this library
-      const auto &order = CodeGenData<BaseScalar>::invocation_order;
+      const auto &order = *CodeGenData<BaseScalar>::invocation_order;
       const auto &hierarchy = CodeGenData<BaseScalar>::call_hierarchy;
       cpu_models_[name_] =
           GenericModelPtr(cpu_library_->model(name_).release());

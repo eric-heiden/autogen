@@ -250,36 +250,51 @@ struct publish_vec_function {
   }
 };
 
-template <template <typename> typename Class, typename Scalar, typename Handle>
+template <template <typename> typename Class, typename Scalar,
+          template <typename> typename... Parents>
+using PyClassPublishHandle =
+    typename py::class_<Class<Scalar>, std::shared_ptr<Class<Scalar>>,
+                        Parents<Scalar>...>;
+
+template <template <typename> typename Class, typename Scalar,
+          template <typename> typename... Parents>
 struct ClassPublisher {
-  virtual void operator()(Handle& handle) const = 0;
+  virtual void operator()(
+      PyClassPublishHandle<Class, Scalar, Parents...>& handle) const = 0;
 };
 
 template <template <typename> typename Class,
           template <typename> typename... Parents>
 void publish_class(py::module& m, const std::string& name) {
-  using HandleDouble = typename py::class_<Class<double>, Parents<double>...>;
-  using HandleAD = typename py::class_<Class<ADScalar>, Parents<ADScalar>...>;
+  using HandleDouble =
+      typename py::class_<Class<double>, std::shared_ptr<Class<double>>,
+                          Parents<double>...>;
+  using HandleAD =
+      typename py::class_<Class<ADScalar>, std::shared_ptr<Class<ADScalar>>,
+                          Parents<ADScalar>...>;
   using HandleADCG =
-      typename py::class_<Class<ADCGScalar>, Parents<ADCGScalar>...>;
-  static auto handle_double = HandleDouble(m, (name + "_double").c_str());
-  static ClassPublisher<Class, double, HandleDouble> pub_double;
-  pub_double(handle_double);
-  static auto handle_ad = HandleAD(m, (name + "_ad").c_str());
-  static ClassPublisher<Class, ADScalar, HandleAD> pub_ad;
-  pub_ad(handle_ad);
-  static auto handle_adcg = HandleADCG(m, (name + "_adcg").c_str());
-  static ClassPublisher<Class, ADCGScalar, HandleADCG> pub_adcg;
-  pub_adcg(handle_adcg);
-  static auto handle_type =
+      typename py::class_<Class<ADCGScalar>, std::shared_ptr<Class<ADCGScalar>>,
+                          Parents<ADCGScalar>...>;
+  auto handle_double = HandleDouble(m, (name + "_double").c_str());
+  auto pub_double = ClassPublisher<Class, double, Parents...>();
+  (pub_double)(handle_double);
+  auto handle_ad = HandleAD(m, (name + "_ad").c_str());
+  auto pub_ad = ClassPublisher<Class, ADScalar, Parents...>();
+  (pub_ad)(handle_ad);
+  auto handle_adcg = HandleADCG(m, (name + "_adcg").c_str());
+  auto pub_adcg = ClassPublisher<Class, ADCGScalar, Parents...>();
+  (pub_adcg)(handle_adcg);
+  auto handle_type =
       m.def(name.c_str(), [&m, &name](py::args args, const py::kwargs& kwargs) {
         switch (get_scope()->mode) {
           case SCALAR_CPPAD: {
+            retrieve_tape<ADScalar>();
             std::cout << "returning CppAD\n";
             py::type type = py::type::of<Class<ADScalar>>();
             return type(*args, **kwargs);
           }
           case SCALAR_CODEGEN: {
+            retrieve_tape<ADCGScalar>();
             std::cout << "returning CodeGen\n";
             py::type type = py::type::of<Class<ADCGScalar>>();
             return type(*args, **kwargs);
