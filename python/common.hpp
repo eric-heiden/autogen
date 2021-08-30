@@ -192,17 +192,23 @@ std::string scalar_name<double>() {
 
 template <template <typename> typename Functor>
 struct publish_function {
+  Functor<double> functor_double;
   Functor<ADScalar> functor_ad;
   Functor<ADCGScalar> functor_cg;
 
   void operator()(py::module& m, const char* name) {
-    m.def(name, [this, name](const ADScalar& x) -> ADScalar {
+    m.def(name, [this, name](double x) {
+      std::cout << "Calling double " << name << " with x = " << x << "\n";
+      return functor_double(x);
+    });
+
+    m.def(name, [this, name](const ADScalar& x) {
       retrieve_tape<ADScalar>();
       std::cout << "Calling CppAD " << name << " with x = " << x << "\n";
       return functor_ad(x);
     });
 
-    m.def(name, [this, name](const ADCGScalar& x) -> ADCGScalar {
+    m.def(name, [this, name](const ADCGScalar& x) {
       retrieve_tape<ADCGScalar>();
       std::cout << "Calling CodeGen " << name << " with x = " << x << "\n";
       return functor_cg(x);
@@ -212,10 +218,25 @@ struct publish_function {
 
 template <template <typename> typename Functor>
 struct publish_vec_function {
+  Functor<double> functor_double;
   Functor<ADScalar> functor_ad;
   Functor<ADCGScalar> functor_cg;
 
   void operator()(py::module& m, const char* name) {
+    m.def(name,
+          [this, name](const std::vector<double>& x) -> std::vector<double> {
+            std::cout << "Calling double " << name << "\n";
+            try {
+              std::vector<double> output;
+              functor_double(x, output);
+              return output;
+            } catch (const std::exception& ex) {
+              std::cerr << "Error while calling function \"" << name << "\":\n"
+                        << ex.what() << "\n";
+              throw ex;
+            }
+          });
+
     m.def(
         name,
         [this, name](const std::vector<ADScalar>& x) -> std::vector<ADScalar> {
