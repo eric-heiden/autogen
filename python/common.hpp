@@ -274,7 +274,7 @@ struct publish_vec_function {
 template <template <typename> typename Class, typename Scalar,
           template <typename> typename... Parents>
 using PyClassPublishHandle =
-    typename py::class_<Class<Scalar>, std::shared_ptr<Class<Scalar>>,
+    typename py::class_<Class<Scalar>,
                         Parents<Scalar>...>;
 
 template <template <typename> typename Class, typename Scalar,
@@ -288,13 +288,13 @@ template <template <typename> typename Class,
           template <typename> typename... Parents>
 void publish_class(py::module& m, const std::string& name) {
   using HandleDouble =
-      typename py::class_<Class<double>, std::shared_ptr<Class<double>>,
+      typename py::class_<Class<double>,
                           Parents<double>...>;
   using HandleAD =
-      typename py::class_<Class<ADScalar>, std::shared_ptr<Class<ADScalar>>,
+      typename py::class_<Class<ADScalar>,
                           Parents<ADScalar>...>;
   using HandleADCG =
-      typename py::class_<Class<ADCGScalar>, std::shared_ptr<Class<ADCGScalar>>,
+      typename py::class_<Class<ADCGScalar>,
                           Parents<ADCGScalar>...>;
   auto handle_double = HandleDouble(m, (name + "_double").c_str());
   auto pub_double = ClassPublisher<Class, double, Parents...>();
