@@ -314,6 +314,7 @@ PYBIND11_MODULE(_autogen, m) {
                     &autogen::GeneratedCodeGen::set_global_input_dim)
       .def_property_readonly("is_compiled",
                              &autogen::GeneratedCodeGen::is_compiled)
+      .def_readwrite("debug_mode", &autogen::GeneratedCodeGen::debug_mode)
       .def("discard_library", &autogen::GeneratedCodeGen::discard_library)
       .def_property("library_name", &autogen::GeneratedCodeGen::library_name,
                     &autogen::GeneratedCodeGen::load_precompiled_library);
