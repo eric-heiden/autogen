@@ -22,6 +22,57 @@ PYBIND11_MAKE_OPAQUE(ADCGVector);
 PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADFun>);
 PYBIND11_MAKE_OPAQUE(std::shared_ptr<ADCGFun>);
 
+template <typename Scalar>
+void expose_where_gt(py::module& m, const std::string& name) {
+  m.def(
+      name.c_str(),
+      [](const Scalar& x, const Scalar& y, const Scalar& if_true,
+         const Scalar& if_false) {
+        return autogen::where_gt(x, y, if_true, if_false);
+      },
+      py::arg("x"), py::arg("y"), py::arg("if_true"), py::arg("if_false"));
+}
+template <typename Scalar>
+void expose_where_lt(py::module& m, const std::string& name) {
+  m.def(
+      name.c_str(),
+      [](const Scalar& x, const Scalar& y, const Scalar& if_true,
+         const Scalar& if_false) {
+        return autogen::where_lt(x, y, if_true, if_false);
+      },
+      py::arg("x"), py::arg("y"), py::arg("if_true"), py::arg("if_false"));
+}
+template <typename Scalar>
+void expose_where_ge(py::module& m, const std::string& name) {
+  m.def(
+      name.c_str(),
+      [](const Scalar& x, const Scalar& y, const Scalar& if_true,
+         const Scalar& if_false) {
+        return autogen::where_ge(x, y, if_true, if_false);
+      },
+      py::arg("x"), py::arg("y"), py::arg("if_true"), py::arg("if_false"));
+}
+template <typename Scalar>
+void expose_where_le(py::module& m, const std::string& name) {
+  m.def(
+      name.c_str(),
+      [](const Scalar& x, const Scalar& y, const Scalar& if_true,
+         const Scalar& if_false) {
+        return autogen::where_le(x, y, if_true, if_false);
+      },
+      py::arg("x"), py::arg("y"), py::arg("if_true"), py::arg("if_false"));
+}
+template <typename Scalar>
+void expose_where_eq(py::module& m, const std::string& name) {
+  m.def(
+      name.c_str(),
+      [](const Scalar& x, const Scalar& y, const Scalar& if_true,
+         const Scalar& if_false) {
+        return autogen::where_eq(x, y, if_true, if_false);
+      },
+      py::arg("x"), py::arg("y"), py::arg("if_true"), py::arg("if_false"));
+}
+
 PYBIND11_MODULE(_autogen, m) {
   m.doc() = R"pbdoc(
         Autogen python plugin
@@ -114,7 +165,8 @@ PYBIND11_MODULE(_autogen, m) {
     // XXX save tape table for thread 0
     py::set_shared_data("tape_table_ad", ADScalar::tape_table[0]);
     // py::set_shared_data("traces", &CodeGenData<BaseScalar>::traces);
-    // py::set_shared_data("is_dry_run", &CodeGenData<BaseScalar>::is_dry_run);
+    // py::set_shared_data("is_dry_run",
+    // &CodeGenData<BaseScalar>::is_dry_run);
     // py::set_shared_data("call_hierarchy",
     // &CodeGenData<BaseScalar>::call_hierarchy);
     // py::set_shared_data("invocation_order",
@@ -369,9 +421,9 @@ PYBIND11_MODULE(_autogen, m) {
                                     const ADCGVector& input) {
         if (CodeGenData<BaseScalar>::traces->find(name) ==
             CodeGenData<BaseScalar>::traces->end()) {
-          throw std::runtime_error(
-              "Could not find trace with name \"" + name +
-              "\" while attempting to call the corresponding function bridge.");
+          throw std::runtime_error("Could not find trace with name \"" + name +
+                                   "\" while attempting to call the "
+                                   "corresponding function bridge.");
         }
         FunctionTrace<BaseScalar>& trace =
             (*CodeGenData<BaseScalar>::traces)[name];
@@ -379,6 +431,26 @@ PYBIND11_MODULE(_autogen, m) {
         (*(trace.bridge))(input, output);
         return output;
       });
+
+  expose_where_gt<BaseScalar>(m, "where_gt");
+  expose_where_gt<ADScalar>(m, "where_gt");
+  expose_where_gt<ADCGScalar>(m, "where_gt");
+  
+  expose_where_lt<BaseScalar>(m, "where_lt");
+  expose_where_lt<ADScalar>(m, "where_lt");
+  expose_where_lt<ADCGScalar>(m, "where_lt");
+  
+  expose_where_ge<BaseScalar>(m, "where_ge");
+  expose_where_ge<ADScalar>(m, "where_ge");
+  expose_where_ge<ADCGScalar>(m, "where_ge");
+  
+  expose_where_le<BaseScalar>(m, "where_le");
+  expose_where_le<ADScalar>(m, "where_le");
+  expose_where_le<ADCGScalar>(m, "where_le");
+  
+  expose_where_eq<BaseScalar>(m, "where_eq");
+  expose_where_eq<ADScalar>(m, "where_eq");
+  expose_where_eq<ADCGScalar>(m, "where_eq");
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
