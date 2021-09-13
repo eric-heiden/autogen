@@ -104,7 +104,7 @@ class GeneratedCodeGen : public GeneratedBase {
 
   void set_global_input_dim(int dim) override {
     global_input_dim_ = dim;
-    local_input_dim_ = main_trace_.tape->Domain() - dim;
+    local_input_dim_ = static_cast<int>(main_trace_.tape->Domain() - dim);
     discard_library();
   }
 

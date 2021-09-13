@@ -125,7 +125,7 @@ struct FileUtils {
         path[len] = 0;
       }
     }
-    return len;
+    return static_cast<int>(len);
   }
 
   static int get_exe_path(char* path, int max_path_len_in_bytes) {

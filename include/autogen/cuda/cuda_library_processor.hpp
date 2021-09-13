@@ -7,8 +7,9 @@
 #endif
 
 #include "autogen/utils/stopwatch.hpp"
-#include "cuda_language.hpp"
 #include "cuda_codegen.hpp"
+#include "cuda_language.hpp"
+
 
 namespace autogen {
 
@@ -23,7 +24,8 @@ static std::string exec(const char *cmd) {
   if (!pipe) {
     throw std::runtime_error("popen() failed!");
   }
-  while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+  while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) !=
+         nullptr) {
     result += buffer.data();
   }
   result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
@@ -218,7 +220,8 @@ class CudaLibraryProcessor {
     std::stringstream cmd;
     std::cout << "Compiling CUDA library via " << nvcc_path_ << std::endl;
     cmd << "\"" << nvcc_path_ << "\" ";
-    cmd << "--ptxas-options=-O" << std::to_string(optimization_level_) << ",-v ";
+    cmd << "--ptxas-options=-O" << std::to_string(optimization_level_)
+        << ",-v ";
     cmd << "--ptxas-options=-v "
         << "-rdc=true ";
     // if (debug_mode_) {
