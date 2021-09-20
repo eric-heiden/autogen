@@ -72,6 +72,20 @@ void expose_where_eq(py::module& m, const std::string& name) {
       },
       py::arg("x"), py::arg("y"), py::arg("if_true"), py::arg("if_false"));
 }
+template <typename Scalar>
+void expose_min(py::module& m, const std::string& name) {
+  m.def(
+      name.c_str(),
+      [](const Scalar& x, const Scalar& y) { return autogen::min(x, y); },
+      py::arg("x"), py::arg("y"));
+}
+template <typename Scalar>
+void expose_max(py::module& m, const std::string& name) {
+  m.def(
+      name.c_str(),
+      [](const Scalar& x, const Scalar& y) { return autogen::max(x, y); },
+      py::arg("x"), py::arg("y"));
+}
 
 PYBIND11_MODULE(_autogen, m) {
   m.doc() = R"pbdoc(
@@ -455,6 +469,14 @@ PYBIND11_MODULE(_autogen, m) {
   expose_where_eq<BaseScalar>(m, "where_eq");
   expose_where_eq<ADScalar>(m, "where_eq");
   expose_where_eq<ADCGScalar>(m, "where_eq");
+
+  expose_min<BaseScalar>(m, "min");
+  expose_min<ADScalar>(m, "min");
+  expose_min<ADCGScalar>(m, "min");
+
+  expose_max<BaseScalar>(m, "max");
+  expose_max<ADScalar>(m, "max");
+  expose_max<ADCGScalar>(m, "max");
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);

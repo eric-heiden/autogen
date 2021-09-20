@@ -104,4 +104,14 @@ static FORCE_INLINE Scalar isnan(const Scalar& x, const Scalar& if_true,
                                  const Scalar& if_false) {
   return x == x ? if_false : if_true;
 }
+
+template <typename Scalar>
+static FORCE_INLINE Scalar min(const Scalar& x, const Scalar& y) {
+  return where_lt(x, y, x, y);
+}
+
+template <typename Scalar>
+static FORCE_INLINE Scalar max(const Scalar& x, const Scalar& y) {
+  return where_gt(x, y, x, y);
+}
 }  // namespace autogen
