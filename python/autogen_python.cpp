@@ -153,10 +153,12 @@ PYBIND11_MODULE(_autogen, m) {
           "Evaluates the Jacobian of the function")
       .def_property_readonly(
           "input_dim",
-          [](const std::shared_ptr<ADCGFun>& fun) { return fun->Domain(); })
+          [](const std::shared_ptr<ADFun>& fun) { return fun->Domain(); })
       .def_property_readonly(
           "output_dim",
-          [](const std::shared_ptr<ADCGFun>& fun) { return fun->Range(); });
+          [](const std::shared_ptr<ADFun>& fun) { return fun->Range(); })
+      .def("optimize",
+           [](std::shared_ptr<ADFun>& fun) { return fun->optimize(); });
   // .def("to_json", &ADFun::to_json,
   //      "Represents the traced function by a JSON string");
 
@@ -183,7 +185,9 @@ PYBIND11_MODULE(_autogen, m) {
           [](const std::shared_ptr<ADCGFun>& fun) { return fun->Domain(); })
       .def_property_readonly(
           "output_dim",
-          [](const std::shared_ptr<ADCGFun>& fun) { return fun->Range(); });
+          [](const std::shared_ptr<ADCGFun>& fun) { return fun->Range(); })
+      .def("optimize",
+           [](std::shared_ptr<ADCGFun>& fun) { return fun->optimize(); });
 
   m.def("independent", [](ADCGVector& x) {
     CppAD::Independent(x);
@@ -435,19 +439,19 @@ PYBIND11_MODULE(_autogen, m) {
   expose_where_gt<BaseScalar>(m, "where_gt");
   expose_where_gt<ADScalar>(m, "where_gt");
   expose_where_gt<ADCGScalar>(m, "where_gt");
-  
+
   expose_where_lt<BaseScalar>(m, "where_lt");
   expose_where_lt<ADScalar>(m, "where_lt");
   expose_where_lt<ADCGScalar>(m, "where_lt");
-  
+
   expose_where_ge<BaseScalar>(m, "where_ge");
   expose_where_ge<ADScalar>(m, "where_ge");
   expose_where_ge<ADCGScalar>(m, "where_ge");
-  
+
   expose_where_le<BaseScalar>(m, "where_le");
   expose_where_le<ADScalar>(m, "where_le");
   expose_where_le<ADCGScalar>(m, "where_le");
-  
+
   expose_where_eq<BaseScalar>(m, "where_eq");
   expose_where_eq<ADScalar>(m, "where_eq");
   expose_where_eq<ADCGScalar>(m, "where_eq");
