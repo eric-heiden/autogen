@@ -87,7 +87,7 @@ static void retrieve_tape();
 
 template <>
 void retrieve_tape<ADScalar>() {
-  std::cout << "Retrieving ADScalar tape table...\n";
+  // std::cout << "Retrieving ADScalar tape table...\n";
   ADScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<double>*>(
       py::get_shared_data("tape_table_ad"));
   // ADScalar::atomic_index_infos =
@@ -120,20 +120,20 @@ void print_invocation_order() {
 
 template <typename T>
 void retrieve_shared_ptr(T** target, const std::string& name) {
-  std::cout << "Retrieving shared pointer " << name << "...";
+  // std::cout << "Retrieving shared pointer " << name << "...";
   *target = reinterpret_cast<T*>(py::get_shared_data(name));
-  if (!*target) {
-    std::cout << "  NULL\n";
-  } else {
-    std::cout << "  OK\n";
-  }
+  // if (!*target) {
+  //   std::cout << "  NULL\n";
+  // } else {
+  //   std::cout << "  OK\n";
+  // }
 }
 
 template <>
 void retrieve_tape<ADCGScalar>() {
-  std::cout << "before retrieving tape ADCG restored Atomic index infos has "
-            << ADCGScalar::atomic_index_infos->size() << " entries.\n";
-  std::cout << "Retrieving ADCGScalar tape table...\n";
+  // std::cout << "before retrieving tape ADCG restored Atomic index infos has "
+  //           << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+  // std::cout << "Retrieving ADCGScalar tape table...\n";
   ADCGScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<CGScalar>*>(
       py::get_shared_data("tape_table_adcg"));
   ADCGScalar::tape_id_table =
@@ -152,8 +152,8 @@ void retrieve_tape<ADCGScalar>() {
   // autogen::CodeGenData<autogen::BaseScalar>::call_hierarchy =
   //     *reinterpret_cast<std::map<std::string, std::vector<std::string>>*>(
   //         py::get_shared_data("call_hierarchy"));
-  std::cout << "before retrieving tape data:  ";
-  print_invocation_order();
+  // std::cout << "before retrieving tape data:  ";
+  // print_invocation_order();
   // autogen::CodeGenData<autogen::BaseScalar>::invocation_order =
   //     reinterpret_cast<std::vector<std::string>*>(
   //         py::get_shared_data("invocation_order"));
@@ -161,10 +161,10 @@ void retrieve_tape<ADCGScalar>() {
       &autogen::CodeGenData<autogen::BaseScalar>::invocation_order,
       "invocation_order");
 
-  std::cout << "after retrieved tape data:  ";
-  print_invocation_order();
-  std::cout << "ADCG restored Atomic index infos has "
-            << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+  // std::cout << "after retrieved tape data:  ";
+  // print_invocation_order();
+  // std::cout << "ADCG restored Atomic index infos has "
+  //           << ADCGScalar::atomic_index_infos->size() << " entries.\n";
 }
 
 template <>
@@ -198,19 +198,19 @@ struct publish_function {
 
   void operator()(py::module& m, const char* name) {
     m.def(name, [this, name](double x) {
-      std::cout << "Calling double " << name << " with x = " << x << "\n";
+      // std::cout << "Calling double " << name << " with x = " << x << "\n";
       return functor_double(x);
     });
 
     m.def(name, [this, name](const ADScalar& x) {
       retrieve_tape<ADScalar>();
-      std::cout << "Calling CppAD " << name << " with x = " << x << "\n";
+      // std::cout << "Calling CppAD " << name << " with x = " << x << "\n";
       return functor_ad(x);
     });
 
     m.def(name, [this, name](const ADCGScalar& x) {
       retrieve_tape<ADCGScalar>();
-      std::cout << "Calling CodeGen " << name << " with x = " << x << "\n";
+      // std::cout << "Calling CodeGen " << name << " with x = " << x << "\n";
       return functor_cg(x);
     });
   }
@@ -225,7 +225,7 @@ struct publish_vec_function {
   void operator()(py::module& m, const char* name) {
     m.def(name,
           [this, name](const std::vector<double>& x) -> std::vector<double> {
-            std::cout << "Calling double " << name << "\n";
+            // std::cout << "Calling double " << name << "\n";
             try {
               std::vector<double> output;
               functor_double(x, output);
@@ -241,7 +241,7 @@ struct publish_vec_function {
         name,
         [this, name](const std::vector<ADScalar>& x) -> std::vector<ADScalar> {
           retrieve_tape<ADScalar>();
-          std::cout << "Calling CppAD " << name << "\n";
+          // std::cout << "Calling CppAD " << name << "\n";
           try {
             std::vector<ADScalar> output;
             functor_ad(x, output);
@@ -257,7 +257,7 @@ struct publish_vec_function {
           [this,
            name](const std::vector<ADCGScalar>& x) -> std::vector<ADCGScalar> {
             retrieve_tape<ADCGScalar>();
-            std::cout << "Calling CodeGen " << name << "\n";
+            // std::cout << "Calling CodeGen " << name << "\n";
             try {
               std::vector<ADCGScalar> output;
               functor_cg(x, output);
@@ -310,19 +310,19 @@ void publish_class(py::module& m, const std::string& name) {
         switch (get_scope()->mode) {
           case SCALAR_CPPAD: {
             retrieve_tape<ADScalar>();
-            std::cout << "returning CppAD\n";
+            // std::cout << "returning CppAD\n";
             py::type type = py::type::of<Class<ADScalar>>();
             return type(*args, **kwargs);
           }
           case SCALAR_CODEGEN: {
             retrieve_tape<ADCGScalar>();
-            std::cout << "returning CodeGen\n";
+            // std::cout << "returning CodeGen\n";
             py::type type = py::type::of<Class<ADCGScalar>>();
             return type(*args, **kwargs);
           }
           case SCALAR_DOUBLE:
           default: {
-            std::cout << "returning double\n";
+            // std::cout << "returning double\n";
             py::type type = py::type::of<Class<double>>();
             return type(*args, **kwargs);
           }

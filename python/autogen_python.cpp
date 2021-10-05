@@ -140,14 +140,6 @@ PYBIND11_MODULE(_autogen, m) {
     }
   });
 
-  m.def("to_double", [](double d) -> double { return d; });
-  m.def("to_double", [](const ADScalar& s) -> double {
-    return CppAD::Value(CppAD::Var2Par(s));
-  });
-  m.def("to_double", [](const ADCGScalar& s) -> double {
-    return CppAD::Value(CppAD::Var2Par(s)).getValue();
-  });
-
   // For CppADScalar
   py::class_<std::shared_ptr<ADFun>>(m, "ADFun")
       .def(py::init([](const ADVector& x, const ADVector& y) {
@@ -214,13 +206,13 @@ PYBIND11_MODULE(_autogen, m) {
     py::set_shared_data("call_hierarchy",
                         &CodeGenData<BaseScalar>::call_hierarchy);
 
-    std::cout << "when calling independent: ";
-    print_invocation_order();
+    // std::cout << "when calling independent: ";
+    // print_invocation_order();
 
     py::set_shared_data("invocation_order",
                         CodeGenData<BaseScalar>::invocation_order);
-    std::cout << "ADCG Atomic index infos has "
-              << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+    // std::cout << "ADCG Atomic index infos has "
+    //           << ADCGScalar::atomic_index_infos->size() << " entries.\n";
   });
 
   py::class_<autogen::GeneratedCppAD>(m, "GeneratedCppAD")
@@ -268,6 +260,7 @@ PYBIND11_MODULE(_autogen, m) {
             return outputs;
           },
           "Evaluates the Jacobian of the function")
+      .def_property_readonly("input_dim", &autogen::GeneratedCppAD::input_dim)
       .def_property_readonly("local_input_dim",
                              &autogen::GeneratedCppAD::local_input_dim)
       .def_property_readonly("output_dim", &autogen::GeneratedCppAD::output_dim)
@@ -414,8 +407,8 @@ PYBIND11_MODULE(_autogen, m) {
       .def_static("set_dry_run",
                   [](bool dry_run) {
                     CodeGenData<BaseScalar>::is_dry_run = dry_run;
-                    std::cout << "Setting dry run to " << std::boolalpha
-                              << CodeGenData<BaseScalar>::is_dry_run << "\n";
+                    // std::cout << "Setting dry run to " << std::boolalpha
+                    //           << CodeGenData<BaseScalar>::is_dry_run << "\n";
                   })
       .def_readwrite_static("invocation_order",
                             &CodeGenData<BaseScalar>::invocation_order)
@@ -477,6 +470,14 @@ PYBIND11_MODULE(_autogen, m) {
   expose_max<BaseScalar>(m, "max");
   expose_max<ADScalar>(m, "max");
   expose_max<ADCGScalar>(m, "max");
+
+  m.def("to_double", [](double d) -> double { return d; });
+  m.def("to_double", [](const ADScalar& s) -> double {
+    return CppAD::Value(CppAD::Var2Par(s));
+  });
+  m.def("to_double", [](const ADCGScalar& s) -> double {
+    return CppAD::Value(CppAD::Var2Par(s)).getValue();
+  });
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
