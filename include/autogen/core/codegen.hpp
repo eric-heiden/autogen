@@ -123,7 +123,7 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
     trace.ax.resize(input.size());
     trace.ay.resize(output.size());
     for (size_t i = 0; i < input.size(); ++i) {
-      BaseScalar raw = CppAD::Value(CppAD::Var2Par(input[i])).getValue();
+      BaseScalar raw = to_double(input[i]);
       trace.trace_input[i] = raw;
       trace.ax[i] = ADCGScalar(raw);
     }
@@ -132,28 +132,30 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
     trace.functor(trace.ax, trace.ay);
     trace.tape = std::make_shared<ADFun>();
     trace.tape->Dependent(trace.ax, trace.ay);
+    trace.tape->function_name_set(name);
     trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
 
     (*traces)[name] = trace;
     functor(input, output);
+    std::cout << "Traced atomic function \"" << trace.name << "\".\n";
 #if DEBUG
     std::cout << "\tNew function trace created.\n";
 #endif
-    std::cout << "Invocation order: ";
-    for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
-      std::cout << s << " ";
-    }
-    std::cout << std::endl;
+    // std::cout << "Invocation order: ";
+    // for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
+    //   std::cout << s << " ";
+    // }
+    // std::cout << std::endl;
     return;
   } else if (CodeGenData<BaseScalar>::is_dry_run) {
 #if DEBUG
     std::cout << "\tAlready traced during this dry run.\n";
 #endif
-    std::cout << "Invocation order: ";
-    for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
-      std::cout << s << " ";
-    }
-    std::cout << std::endl;
+    // std::cout << "Invocation order: ";
+    // for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
+    //   std::cout << s << " ";
+    // }
+    // std::cout << std::endl;
     // we already preprocessed this function during the dry run
     return;
   }
@@ -169,11 +171,11 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
   }
   (*(trace.bridge))(input, output);
 
-  std::cout << "Invocation order: ";
-  for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
-    std::cout << s << " ";
-  }
-  std::cout << std::endl;
+  // std::cout << "Invocation order: ";
+  // for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
+  //   std::cout << s << " ";
+  // }
+  // std::cout << std::endl;
 }
 
 template <typename Functor>
@@ -192,7 +194,7 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
     CodeGenData<BaseScalar>::is_dry_run = true;
     std::vector<ADCGScalar> ax(input.size()), ay(output.size());
     for (size_t i = 0; i < input.size(); ++i) {
-      ax[i] = ADCGScalar(input[i]);
+      ax[i] = ADCGScalar(to_double(input[i]));
     }
     functor(ax, ay);
     CodeGenData<BaseScalar>::is_dry_run = false;
@@ -203,21 +205,22 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
   std::cout << "Function \"" << name << "\" has " << order.size()
             << " atomic function(s).\n";
   // TODO can this be removed?
-  for (auto it = order.rbegin(); it != order.rend(); ++it) {
-    FunctionTrace<BaseScalar> &trace = (*CodeGenData<BaseScalar>::traces)[*it];
-    std::cout << "Tracing function \"" << trace.name
-              << "\" for code generation...\n";
-    trace.ax.resize(trace.input_dim);
-    trace.ay.resize(trace.output_dim);
-    for (size_t i = 0; i < trace.input_dim; ++i) {
-      trace.ax[i] = ADCGScalar(trace.trace_input[i]);
-    }
-    CppAD::Independent(trace.ax);
-    trace.functor(trace.ax, trace.ay);
-    trace.tape = std::make_shared<ADFun>();
-    trace.tape->Dependent(trace.ax, trace.ay);
-    trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
-  }
+  // for (auto it = order.rbegin(); it != order.rend(); ++it) {
+  //   FunctionTrace<BaseScalar> &trace = (*CodeGenData<BaseScalar>::traces)[*it];
+  //   std::cout << "Tracing function \"" << trace.name
+  //             << "\" for code generation...\n";
+  //   trace.ax.resize(trace.input_dim);
+  //   trace.ay.resize(trace.output_dim);
+  //   for (size_t i = 0; i < trace.input_dim; ++i) {
+  //     trace.ax[i] = ADCGScalar(to_double(trace.trace_input[i]));
+  //   }
+  //   CppAD::Independent(trace.ax);
+  //   trace.functor(trace.ax, trace.ay);
+  //   trace.tape = std::make_shared<ADFun>();
+  //   trace.tape->Dependent(trace.ax, trace.ay);
+  //   trace.tape->function_name_set(trace.name);
+  //   trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
+  // }
 
   // finally, trace the top-level function
   FunctionTrace<BaseScalar> trace;
@@ -225,12 +228,13 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
   std::vector<ADCGScalar> ax(input.size()), ay(output.size());
   std::cout << "Tracing function \"" << name << "\" for code generation...\n";
   for (size_t i = 0; i < input.size(); ++i) {
-    ax[i] = ADCGScalar(input[i]);
+    ax[i] = ADCGScalar(to_double(input[i]));
   }
   CppAD::Independent(ax);
   functor(ax, ay);
   trace.tape = std::make_shared<ADFun>();
   trace.tape->Dependent(ax, ay);
+  trace.tape->function_name_set(name);
   trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
   trace.input_dim = static_cast<int>(input.size());
   trace.output_dim = static_cast<int>(output.size());
