@@ -1,5 +1,8 @@
 #pragma once
 
+#undef min
+#undef max
+
 #if defined(_MSC_VER)
 #define FORCE_INLINE __forceinline
 #else
@@ -7,19 +10,6 @@
 #endif
 
 namespace autogen {
-template <typename Scalar>
-struct is_cppad_scalar {
-  static constexpr bool value = false;
-};
-template <typename Scalar>
-struct is_cppad_scalar<CppAD::AD<Scalar>> {
-  static constexpr bool value = true;
-};
-template <typename Scalar>
-struct is_cppad_scalar<CppAD::cg::CG<Scalar>> {
-  static constexpr bool value = true;
-};
-
 template <typename Scalar>
 static CppAD::AD<Scalar> where_gt(const CppAD::AD<Scalar>& x,
                                   const CppAD::AD<Scalar>& y,
