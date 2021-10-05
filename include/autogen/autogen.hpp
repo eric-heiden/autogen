@@ -93,6 +93,11 @@ struct Generated {
       gen_cg_->discard_library();
     }
   }
+  void load_precompiled_library(const std::string& path) {
+    if (gen_cg_) {
+      gen_cg_->load_precompiled_library(path);
+    }
+  }
 
   AccumulationMethod jacobian_acc_method() const {
     return this->jac_acc_method_;
