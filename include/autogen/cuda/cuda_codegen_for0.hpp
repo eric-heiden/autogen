@@ -65,10 +65,11 @@ std::string CudaModelSourceGen<Base>::forward_zero_source() {
   std::size_t temporary_dim = nameGen.getMaxTemporaryVariableID() + 1 -
                               nameGen.getMinTemporaryVariableID();
   if (temporary_dim == 0) {
-    std::cerr << "Warning: generated code has no temporary variables.\n";
+    std::cerr << "Warning: generated code for forward-zero pass of \""
+              << this->_name << "\" has no temporary variables.\n";
   } else {
-    std::cout << "Code generated with " << temporary_dim
-              << " temporary variables.\n";
+    std::cout << "Code generated for forward-zero pass of \"" << this->_name
+              << "\" with " << temporary_dim << " temporary variables.\n";
   }
   // for (const auto& var : nameGen.getTemporary()) {
   //   std::cout << "\t" << var.name << std::endl;

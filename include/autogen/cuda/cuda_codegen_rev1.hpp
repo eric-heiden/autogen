@@ -334,8 +334,8 @@ std::string CudaModelSourceGen<Base>::reverse_one_source(
     elements[this->_jacSparsity.rows[e]].push_back(this->_jacSparsity.cols[e]);
   }
 
-  std::cout << this->_name << " uses atomics? " << std::boolalpha
-            << this->isAtomicsUsed() << std::endl;
+  // std::cout << this->_name << " uses atomics? " << std::boolalpha
+  //           << this->isAtomicsUsed() << std::endl;
 
   std::ostringstream code;
 

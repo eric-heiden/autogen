@@ -56,10 +56,11 @@ std::string CudaModelSourceGen<Base>::jacobian_source() {
   std::size_t temporary_dim = nameGen.getMaxTemporaryVariableID() + 1 -
                               nameGen.getMinTemporaryVariableID();
   if (temporary_dim == 0) {
-    std::cerr << "Warning: the generated code has no temporary variables.\n";
+    std::cerr << "Warning: generated code for Jacobian pass of \""
+              << this->_name << "\" has no temporary variables.\n";
   } else {
-    std::cout << "Info: the generated code has " << temporary_dim
-              << " temporary variables.\n";
+    std::cout << "Code generated for Jacobian pass of \"" << this->_name
+              << "\" with " << temporary_dim << " temporary variables.\n";
   }
 
   std::ostringstream complete;
