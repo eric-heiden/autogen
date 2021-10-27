@@ -65,6 +65,8 @@ struct Generated {
   size_t global_input_dim_{0};
   size_t output_dim_{0};
 
+  bool debug_mode_{false};
+
   GenerationMode mode_{GENERATE_CPU};
   mutable std::mutex compilation_mutex_;
 
@@ -114,11 +116,9 @@ struct Generated {
   size_t local_input_dim() const { return local_input_dim_; }
   size_t output_dim() const { return output_dim_; }
 
-  bool debug_mode() const { return gen_cg_ && gen_cg_->debug_mode; }
+  bool debug_mode() const { return debug_mode_; }
   void set_debug_mode(bool debug_mode = true) {
-    if (gen_cg_) {
-      gen_cg_->debug_mode = debug_mode;
-    }
+    debug_mode_ = debug_mode;
   }
 
   size_t global_input_dim() const { return global_input_dim_; }
@@ -288,6 +288,7 @@ struct Generated {
       }
       FunctionTrace<BaseScalar> t = autogen::trace(*f_cg_, name, input, output);
       gen_cg_ = std::make_unique<GeneratedCodeGen>(t);
+      gen_cg_->debug_mode = debug_mode_;
       if (compile_in_background) {
         std::thread worker([this, &t]() { compile(t); });
         (*f_double_)(input, output);

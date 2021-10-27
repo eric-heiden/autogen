@@ -101,6 +101,15 @@ class CudaLibrary {
     std::cout << std::endl;
   }
 
+  virtual ~CudaLibrary() {
+#if CPPAD_CG_SYSTEM_WIN
+    FreeLibrary((HMODULE)lib_handle_);
+#else
+    dlclose(lib_handle_);
+#endif
+    lib_handle_ = nullptr;
+  }
+
   const CudaModel<Scalar> &get_model(const std::string &model_name) const {
     return models_.at(model_name);
   }

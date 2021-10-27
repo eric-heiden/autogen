@@ -35,7 +35,8 @@ class GeneratedCodeGen : public GeneratedBase {
   using CGAtomicFunBridge =
       typename FunctionTrace<BaseScalar>::CGAtomicFunBridge;
 
-  typedef std::unique_ptr<CppAD::cg::GenericModel<BaseScalar>> GenericModelPtr;
+  typedef CppAD::cg::GenericModel<BaseScalar> GenericModel;
+  typedef std::shared_ptr<GenericModel> GenericModelPtr;
 
   CodeGenTarget target_{TARGET_CUDA};
 
@@ -54,14 +55,21 @@ class GeneratedCodeGen : public GeneratedBase {
 
   mutable std::shared_ptr<CudaLibrary<BaseScalar>> cuda_library_{nullptr};
 
-#if !CPPAD_CG_SYSTEM_WIN
-  mutable std::shared_ptr<CppAD::cg::LinuxDynamicLib<BaseScalar>> cpu_library_{
-      nullptr};
-  mutable std::map<std::string, GenericModelPtr> cpu_models_;
+#if CPPAD_CG_SYSTEM_WIN
+  typedef CppAD::cg::WindowsDynamicLib<BaseScalar> DynamicLib;
+#else
+  typedef CppAD::cg::PosixDynamicLib<BaseScalar> DynamicLib;
 #endif
+  mutable std::shared_ptr<DynamicLib> cpu_library_{nullptr};
+  mutable std::map<std::string, GenericModelPtr> cpu_models_;
 
  public:
   int num_gpu_threads_per_block{32};
+
+  /**
+   * Absolute path of the Clang compiler.
+   */
+  std::string clang_path;
 
   /**
    * Whether the generated code is compiled in debug mode (only applies to CPU
@@ -79,6 +87,7 @@ class GeneratedCodeGen : public GeneratedBase {
       : name_(main_trace.name), main_trace_(main_trace) {
     output_dim_ = main_trace_.output_dim;
     local_input_dim_ = main_trace_.input_dim;
+    init();
   }
 
   GeneratedCodeGen(const std::string &name, std::shared_ptr<ADFun> tape)
@@ -88,6 +97,22 @@ class GeneratedCodeGen : public GeneratedBase {
     local_input_dim_ = static_cast<int>(tape->Domain());
     std::cout << "tape->Range():  " << tape->Range() << std::endl;
     std::cout << "tape->Domain(): " << tape->Domain() << std::endl;
+    init();
+  }
+
+  void init() {
+#if CPPAD_CG_SYSTEM_WIN
+    clang_path =
+        autogen::exec("powershell -command \"(get-command clang).Path\"");
+#else
+    clang_path = autogen::exec("which clang");
+#endif
+    if (clang_path.empty()) {
+      throw std::runtime_error(
+          "Clang path is empty, make sure clang is "
+          "available on the system path or provide it manually to the "
+          "GeneratedCodegen instance.");
+    }
   }
 
   // discards the compiled library (so that it gets recompiled at the next
@@ -113,14 +138,9 @@ class GeneratedCodeGen : public GeneratedBase {
   void operator()(const std::vector<BaseScalar> &input,
                   std::vector<BaseScalar> &output) override {
     if (target_ == TARGET_CPU) {
-#if CPPAD_CG_SYSTEM_WIN
-      std::cerr << "CPU code generation is not yet available on Windows.\n";
-      return;
-#else
       assert(!library_name_.empty());
-      GenericModelPtr &model = get_cpu_model();
+      auto model = get_cpu_model();
       model->ForwardZero(input, output);
-#endif
     } else if (target_ == TARGET_CUDA) {
       const auto &model = get_cuda_model();
       model.forward_zero(input, output);
@@ -132,10 +152,6 @@ class GeneratedCodeGen : public GeneratedBase {
                   const std::vector<BaseScalar> &global_input) override {
     outputs.resize(local_inputs.size());
     if (target_ == TARGET_CPU) {
-#if CPPAD_CG_SYSTEM_WIN
-      std::cerr << "CPU code generation is not yet available on Windows.\n";
-      return;
-#else
       assert(!library_name_.empty());
       for (auto &o : outputs) {
         o.resize(output_dim_);
@@ -144,7 +160,7 @@ class GeneratedCodeGen : public GeneratedBase {
 #pragma omp parallel for
       for (int i = 0; i < num_tasks; ++i) {
         if (global_input.empty()) {
-          GenericModelPtr &model = get_cpu_model();
+          auto model = get_cpu_model();
           model->ForwardZero(local_inputs[i], outputs[i]);
         } else {
           static thread_local std::vector<BaseScalar> input;
@@ -153,11 +169,10 @@ class GeneratedCodeGen : public GeneratedBase {
           for (size_t j = 0; j < local_inputs[i].size(); ++i) {
             input[j + global_input.size()] = local_inputs[i][j];
           }
-          GenericModelPtr &model = get_cpu_model();
+          auto model = get_cpu_model();
           model->ForwardZero(input, outputs[i]);
         }
       }
-#endif
     } else if (target_ == TARGET_CUDA) {
       const auto &model = get_cuda_model();
       model.forward_zero(&outputs, local_inputs, num_gpu_threads_per_block,
@@ -168,14 +183,9 @@ class GeneratedCodeGen : public GeneratedBase {
   void jacobian(const std::vector<BaseScalar> &input,
                 std::vector<BaseScalar> &output) override {
     if (target_ == TARGET_CPU) {
-#if CPPAD_CG_SYSTEM_WIN
-      std::cerr << "CPU code generation is not yet available on Windows.\n";
-      return;
-#else
       assert(!library_name_.empty());
-      GenericModelPtr &model = get_cpu_model();
+      auto model = get_cpu_model();
       model->Jacobian(input, output);
-#endif
     } else if (target_ == TARGET_CUDA) {
       const auto &model = get_cuda_model();
       model.jacobian(input, output);
@@ -187,10 +197,6 @@ class GeneratedCodeGen : public GeneratedBase {
                 const std::vector<BaseScalar> &global_input) override {
     outputs.resize(local_inputs.size());
     if (target_ == TARGET_CPU) {
-#if CPPAD_CG_SYSTEM_WIN
-      std::cerr << "CPU code generation is not yet available on Windows.\n";
-      return;
-#else
       assert(!library_name_.empty());
       for (auto &o : outputs) {
         o.resize(input_dim() * output_dim_);
@@ -199,7 +205,7 @@ class GeneratedCodeGen : public GeneratedBase {
 #pragma omp parallel for
       for (int i = 0; i < num_tasks; ++i) {
         if (global_input.empty()) {
-          GenericModelPtr &model = get_cpu_model();
+          auto model = get_cpu_model();
           // model->ForwardZero(local_inputs[i], outputs[i]);
           model->Jacobian(local_inputs[i], outputs[i]);
         } else {
@@ -212,11 +218,10 @@ class GeneratedCodeGen : public GeneratedBase {
           for (size_t j = 0; j < local_inputs[i].size(); ++i) {
             input[j + global_input.size()] = local_inputs[i][j];
           }
-          GenericModelPtr &model = get_cpu_model();
+          auto model = get_cpu_model();
           model->Jacobian(input, outputs[i]);
         }
       }
-#endif
     } else if (target_ == TARGET_CUDA) {
       const auto &model = get_cuda_model();
       model.jacobian(&outputs, local_inputs, num_gpu_threads_per_block,
@@ -236,7 +241,9 @@ class GeneratedCodeGen : public GeneratedBase {
     const auto &order = *CodeGenData<BaseScalar>::invocation_order;
     std::list<ModelCSourceGen<BaseScalar> *> models;
     for (auto it = order.rbegin(); it != order.rend(); ++it) {
-      FunctionTrace<BaseScalar> &trace = (*CodeGenData<BaseScalar>::traces)[*it];
+      FunctionTrace<BaseScalar> &trace =
+          (*CodeGenData<BaseScalar>::traces)[*it];
+      // trace.tape->optimize();
       auto *source_gen = new ModelCSourceGen<BaseScalar>(*(trace.tape), *it);
       // source_gen->setCreateSparseJacobian(true);
       // source_gen->setCreateJacobian(true);
@@ -247,18 +254,20 @@ class GeneratedCodeGen : public GeneratedBase {
       libcgen.addModel(*(models.back()));
     }
     libcgen.setVerbose(true);
-#if CPPAD_CG_SYSTEM_WIN
-    SaveFilesModelLibraryProcessor<double> psave(libcgen);
-    psave.saveSourcesTo(name_ + "_cpu_srcs");
-    std::cerr << "CPU code compilation is not yet available on Windows. Saved "
-                 "source files to \""
-              << name_ << "_cpu_srcs"
-              << "\".\n ";
-    std::exit(1);
-#else
+    // #if CPPAD_CG_SYSTEM_WIN
+    //     SaveFilesModelLibraryProcessor<double> psave(libcgen);
+    //     psave.saveSourcesTo(name_ + "_cpu_srcs");
+    //     std::cerr << "CPU code compilation is not yet available on Windows.
+    //     Saved "
+    //                  "source files to \""
+    //               << name_ << "_cpu_srcs"
+    //               << "\".\n ";
+    //     std::exit(1);
+    // #else
     DynamicModelLibraryProcessor<BaseScalar> p(libcgen);
-    auto compiler = std::make_unique<ClangCompiler<BaseScalar>>();
+    auto compiler = std::make_unique<ClangCompiler<BaseScalar>>(clang_path);
     compiler->setSourcesFolder(name_ + "_cpu_srcs");
+    compiler->setTemporaryFolder(name_ + "_cpu_tmp");
     compiler->setSaveToDiskFirst(true);
     if (debug_mode) {
       compiler->addCompileFlag("-g");
@@ -267,61 +276,100 @@ class GeneratedCodeGen : public GeneratedBase {
       compiler->addCompileFlag("-O" + std::to_string(optimization_level));
     }
     p.setLibraryName(name_ + "_cpu");
-    p.createDynamicLibrary(*compiler, false);
-
-    library_name_ = "./" + name_ + "_cpu.so";
-#endif
+    bool load_library = false;  // we do this in another step
+    p.createDynamicLibrary(*compiler, load_library);
+    library_name_ = "./" + name_ + "_cpu";
+    // #endif
     target_ = TARGET_CPU;
   }
 
-#if !CPPAD_CG_SYSTEM_WIN
   mutable std::mutex cpu_library_loading_mutex_{};
 
-  GenericModelPtr &get_cpu_model() const {
+  GenericModelPtr get_cpu_model() const {
     if (!cpu_library_) {
       cpu_library_loading_mutex_.lock();
-      cpu_library_ = std::make_shared<CppAD::cg::LinuxDynamicLib<BaseScalar>>(
-          library_name_);
+      cpu_library_ = std::make_shared<DynamicLib>(library_name_ + library_ext_);
+      std::set<std::string> model_names = cpu_library_->getModelNames();
+      std::cout << "Successfully loaded CPU library "
+                << library_name_ + library_ext_ << std::endl;
+      for (auto &name : model_names) {
+        std::cout << "  Found model " << name << std::endl;
+      }
+      // return cpu_library_->model(name_);
       // load and wire up atomic functions in this library
       const auto &order = *CodeGenData<BaseScalar>::invocation_order;
       const auto &hierarchy = CodeGenData<BaseScalar>::call_hierarchy;
       cpu_models_[name_] =
           GenericModelPtr(cpu_library_->model(name_).release());
-      for (const std::string &model_name : order) {
-        // we have to keep the atomic function pointers alive
-        cpu_models_[model_name] =
-            GenericModelPtr(cpu_library_->model(model_name).release());
-        // simply add every atomic to the top-level function
-        // (because we don't have hierarchy information for the top-level
-        // function)
-        cpu_models_[name_]->addAtomicFunction(
-            cpu_models_[model_name]->asAtomic());
+      if (!cpu_models_[name_]) {
+        throw std::runtime_error("Failed to load model from library " +
+                                 library_name_ + library_ext_);
       }
-      for (const auto &[outer, inner_models] : hierarchy) {
-        auto &outer_model = cpu_models_[outer];
-        for (const std::string &inner : inner_models) {
-          auto &inner_model = cpu_models_[inner];
-          outer_model->addAtomicFunction(inner_model->asAtomic());
-          std::cout << "Connected atomic function \"" + inner +
-                           "\" to its parent function \""
-                    << outer << "\".\n";
+      // atomic functions to be added
+      typedef std::pair<std::string, std::string> ParentChild;
+      std::set<ParentChild> remaining_atomics;
+      for (const std::string &s :
+           cpu_models_[name_]->getAtomicFunctionNames()) {
+        remaining_atomics.insert(std::make_pair(name_, s));
+      }
+      while (!remaining_atomics.empty()) {
+        ParentChild member = *(remaining_atomics.begin());
+        const std::string &parent = member.first;
+        const std::string &atomic_name = member.second;
+        remaining_atomics.erase(remaining_atomics.begin());
+        if (cpu_models_.find(atomic_name) == cpu_models_.end()) {
+          std::cout << "  Adding atomic function " << atomic_name << std::endl;
+          cpu_models_[atomic_name] =
+              GenericModelPtr(cpu_library_->model(atomic_name).release());
+          for (const std::string &s :
+               cpu_models_[atomic_name]->getAtomicFunctionNames()) {
+            remaining_atomics.insert(std::make_pair(atomic_name, s));
+          }
         }
+        auto &atomic_model = cpu_models_[atomic_name];
+        cpu_models_[parent]->addAtomicFunction(atomic_model->asAtomic());
       }
+
+      // for (const std::string &model_name : order) {
+      //   // we have to keep the atomic function pointers alive
+      //   cpu_models_[model_name] =
+      //       GenericModelPtr(cpu_library_->model(model_name).get());
+      //   if (!cpu_models_[model_name]) {
+      //     throw std::runtime_error("Failed to load atomic function \"" +
+      //                              model_name + "\" from library " +
+      //                              library_name_ + library_ext_);
+      //   }
+      //   // simply add every atomic to the top-level function
+      //   // (because we don't have hierarchy information for the top-level
+      //   // function)
+      //   cpu_models_[name_]->addAtomicFunction(
+      //       cpu_models_[model_name]->asAtomic());
+      // }
+      // for (const auto &[outer, inner_models] : hierarchy) {
+      //   auto &outer_model = cpu_models_[outer];
+      //   for (const std::string &inner : inner_models) {
+      //     auto &inner_model = cpu_models_[inner];
+      //     outer_model->addAtomicFunction(inner_model->asAtomic());
+      //     std::cout << "Connected atomic function \"" + inner +
+      //                      "\" to its parent function \""
+      //               << outer << "\".\n";
+      //   }
+      // }
 
       std::cout << "Loaded compiled model \"" << name_ << "\" from \""
                 << library_name_ << "\".\n";
       cpu_library_loading_mutex_.unlock();
     }
+    // return cpu_library_->model(name_);
     return cpu_models_[name_];
   }
-#endif
 
   void compile_cuda() {
     using namespace CppAD;
     using namespace CppAD::cg;
 
     std::cout << "Compiling CUDA code...\n";
-    
+
     std::cout << "Invocation order: ";
     for (const auto &s : *(CodeGenData<BaseScalar>::invocation_order)) {
       std::cout << s << " ";
@@ -340,7 +388,8 @@ class GeneratedCodeGen : public GeneratedBase {
     std::list<CudaModelSourceGen<BaseScalar> *> models;
     for (auto it = order.rbegin(); it != order.rend(); ++it) {
       std::cout << "Adding cuda model " << *it << "\n";
-      FunctionTrace<BaseScalar> &trace = (*CodeGenData<BaseScalar>::traces)[*it];
+      FunctionTrace<BaseScalar> &trace =
+          (*CodeGenData<BaseScalar>::traces)[*it];
       auto *source_gen = new CudaModelSourceGen<BaseScalar>(*(trace.tape), *it);
       source_gen->setCreateForwardOne(true);
       source_gen->setCreateReverseOne(true);
@@ -368,5 +417,12 @@ class GeneratedCodeGen : public GeneratedBase {
     }
     return cuda_library_->get_model(name_);
   }
+
+ private:
+#if CPPAD_CG_SYSTEM_WIN
+  static const inline std::string library_ext_ = ".dll";
+#else
+  static const inline std::string library_ext_ = ".so";
+#endif
 };
 }  // namespace autogen

@@ -65,6 +65,11 @@ struct CodeGenData {
    */
   static inline std::vector<std::string> *invocation_order =
       new std::vector<std::string>;
+  /**
+   * Keeps track of the order of the currently executed function.
+   */
+  static inline std::vector<std::string> *invocation_stack =
+      new std::vector<std::string>;
 
   /**
    * Defines whether the current atomic function should record the gradient tape
@@ -81,6 +86,7 @@ struct CodeGenData {
     traces->clear();
     invocation_order->clear();
     call_hierarchy.clear();
+    invocation_stack->clear();
   }
 
   CodeGenData() = delete;
@@ -103,10 +109,11 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
 
   if (traces->find(name) == traces->end()) {
     auto &order = *CodeGenData<BaseScalar>::invocation_order;
-    if (!order.empty()) {
+    auto &stack = *CodeGenData<BaseScalar>::invocation_stack;
+    if (!stack.empty()) {
       // the current function is called by another function, hence update the
       // call hierarchy
-      const std::string &parent = order.back();
+      const std::string &parent = stack.back();
       auto &hierarchy = CodeGenData<BaseScalar>::call_hierarchy;
       if (hierarchy.find(parent) == hierarchy.end()) {
         hierarchy[parent] = std::vector<std::string>();
@@ -114,6 +121,7 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
       hierarchy[parent].push_back(name);
     }
     order.push_back(name);
+    stack.push_back(name);
     FunctionTrace<BaseScalar> trace;
     trace.name = name;
     trace.functor = functor;
@@ -145,7 +153,8 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
     // for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
     //   std::cout << s << " ";
     // }
-    // std::cout << std::endl;
+    // std::cout << std::endl;    
+    stack.pop_back();  // remove current function from the stack
     return;
   } else if (CodeGenData<BaseScalar>::is_dry_run) {
 #if DEBUG
