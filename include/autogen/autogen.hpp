@@ -3,6 +3,7 @@
 #include <mutex>
 
 // clang-format off
+#include "utils/system.hpp"
 #include "core/codegen.hpp"
 #include "core/base.hpp"
 #include "core/generated_numerical.hpp"

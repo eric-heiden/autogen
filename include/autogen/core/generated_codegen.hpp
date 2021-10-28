@@ -55,7 +55,7 @@ class GeneratedCodeGen : public GeneratedBase {
 
   mutable std::shared_ptr<CudaLibrary<BaseScalar>> cuda_library_{nullptr};
 
-#if CPPAD_CG_SYSTEM_WIN
+#if AUTOGEN_SYSTEM_WIN
   typedef CppAD::cg::WindowsDynamicLib<BaseScalar> DynamicLib;
 #else
   typedef CppAD::cg::PosixDynamicLib<BaseScalar> DynamicLib;
@@ -83,6 +83,9 @@ class GeneratedCodeGen : public GeneratedBase {
    */
   int optimization_level{1};
 
+  CodeGenTarget target() const { return target_; }
+  void set_target(CodeGenTarget target) { target_ = target; }
+
   GeneratedCodeGen(const FunctionTrace<BaseScalar> &main_trace)
       : name_(main_trace.name), main_trace_(main_trace) {
     output_dim_ = main_trace_.output_dim;
@@ -101,12 +104,7 @@ class GeneratedCodeGen : public GeneratedBase {
   }
 
   void init() {
-#if CPPAD_CG_SYSTEM_WIN
-    clang_path =
-        autogen::exec("powershell -command \"(get-command clang).Path\"");
-#else
-    clang_path = autogen::exec("which clang");
-#endif
+    clang_path = autogen::find_exe("clang", false);
     if (clang_path.empty()) {
       throw std::runtime_error(
           "Clang path is empty, make sure clang is "
@@ -254,7 +252,7 @@ class GeneratedCodeGen : public GeneratedBase {
       libcgen.addModel(*(models.back()));
     }
     libcgen.setVerbose(true);
-    // #if CPPAD_CG_SYSTEM_WIN
+    // #if AUTOGEN_SYSTEM_WIN
     //     SaveFilesModelLibraryProcessor<double> psave(libcgen);
     //     psave.saveSourcesTo(name_ + "_cpu_srcs");
     //     std::cerr << "CPU code compilation is not yet available on Windows.
@@ -419,7 +417,7 @@ class GeneratedCodeGen : public GeneratedBase {
   }
 
  private:
-#if CPPAD_CG_SYSTEM_WIN
+#if AUTOGEN_SYSTEM_WIN
   static const inline std::string library_ext_ = ".dll";
 #else
   static const inline std::string library_ext_ = ".so";

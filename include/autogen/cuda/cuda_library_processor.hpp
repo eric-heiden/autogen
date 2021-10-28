@@ -2,36 +2,12 @@
 
 #include <filesystem>
 
-#if CPPAD_CG_SYSTEM_WIN
-#include <windows.h>
-#endif
-
 #include "autogen/utils/stopwatch.hpp"
+#include "autogen/utils/system.hpp"
 #include "cuda_codegen.hpp"
 #include "cuda_language.hpp"
 
-
 namespace autogen {
-
-static std::string exec(const char *cmd) {
-  std::array<char, 1024> buffer;
-  std::string result;
-#if CPPAD_CG_SYSTEM_WIN
-  std::unique_ptr<FILE, decltype(&_pclose)> pipe(_popen(cmd, "r"), _pclose);
-#else
-  std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-#endif
-  if (!pipe) {
-    throw std::runtime_error("popen() failed!");
-  }
-  while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) !=
-         nullptr) {
-    result += buffer.data();
-  }
-  result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-
-  return result;
-}
 
 template <class Base>
 class CudaLibraryProcessor {
@@ -78,12 +54,7 @@ class CudaLibraryProcessor {
       library_name_ = library_name;
     }
     if (find_nvcc) {
-#if CPPAD_CG_SYSTEM_WIN
-      nvcc_path_ =
-          autogen::exec("powershell -command \"(get-command nvcc).Path\"");
-#else
-      nvcc_path_ = autogen::exec("which nvcc");
-#endif
+      nvcc_path_ = autogen::find_exe("nvcc");
     }
     if (nvcc_path_.size() < 3) {
       std::cerr << "NVIDIA CUDA Compiler (nvcc) could not be found. Make sure "
@@ -227,7 +198,7 @@ class CudaLibraryProcessor {
     // if (debug_mode_) {
     //   cmd << "-G ";
     // }
-#if CPPAD_CG_SYSTEM_WIN
+#if AUTOGEN_SYSTEM_WIN
     cmd << "-o " << library_name_ << ".dll "
 #else
     cmd << "--compiler-options "
@@ -250,7 +221,7 @@ class CudaLibraryProcessor {
   }
 
   std::string library_file_name() const {
-#if CPPAD_CG_SYSTEM_WIN
+#if AUTOGEN_SYSTEM_WIN
     return library_name_ + ".dll";
 #else
     return library_name_ + ".so";
