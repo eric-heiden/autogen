@@ -1,4 +1,6 @@
 # autogen
+[![autogen-docs](https://github.com/eric-heiden/autogen/actions/workflows/ci.yml/badge.svg)](https://github.com/eric-heiden/autogen/actions/workflows/ci.yml)
+
 Code generation for automatic differentiation with GPU support.
 
 This library leverages CppAD and CppADCodeGen to trace C++ and Python code, and turns it into efficient CUDA or C code.
