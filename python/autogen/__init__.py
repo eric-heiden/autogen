@@ -2,6 +2,9 @@ from typing import Callable
 from _autogen import *
 
 def scalar_type():
+    """
+    Retrieves the scalar type for the current mode.
+    """
     if get_mode() == Mode.DOUBLE:
         return float
     if get_mode() == Mode.CPPAD:
@@ -10,6 +13,9 @@ def scalar_type():
 
 
 def scalar(x):
+    """
+    Converts x to the scalar type for the current mode.
+    """
     if get_mode() == Mode.DOUBLE:
         return float(x)
     if get_mode() == Mode.CPPAD:
@@ -18,6 +24,9 @@ def scalar(x):
 
 
 def vector_type():
+    """
+    Retrieves the vector type for the current mode.
+    """
     if get_mode() == Mode.DOUBLE:
         return list
     if get_mode() == Mode.CPPAD:
@@ -26,6 +35,9 @@ def vector_type():
 
 
 def vector(xs):
+    """
+    Converts xs to the vector type for the current mode.
+    """
     if get_mode() == Mode.DOUBLE:
         return xs
     if get_mode() == Mode.CPPAD:

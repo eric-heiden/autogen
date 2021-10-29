@@ -111,6 +111,11 @@ PYBIND11_MODULE(_autogen, m) {
       .value("CODEGEN", ScalarType::SCALAR_CODEGEN)
       .export_values();
 
+  py::enum_<CodeGenTarget>(m, "Target")
+      .value("CPU", CodeGenTarget::TARGET_CPU)
+      .value("CUDA", CodeGenTarget::TARGET_CUDA)
+      .export_values();
+
   m.def("get_mode", []() { return get_scope()->mode; });
   m.def("set_mode", [](const ScalarType& mode) { get_scope()->mode = mode; });
 
@@ -165,8 +170,8 @@ PYBIND11_MODULE(_autogen, m) {
           [](const std::shared_ptr<ADFun>& fun) { return fun->Range(); })
       .def("optimize",
            [](std::shared_ptr<ADFun>& fun) { return fun->optimize(); });
-  // .def("to_json", &ADFun::to_json,
-  //      "Represents the traced function by a JSON string");
+      // .def("to_json", &ADFun::to_json,
+      //      "Represents the traced function by a JSON string");
 
   m.def("independent", [](ADVector& x) {
     CppAD::Independent(x);
@@ -205,9 +210,6 @@ PYBIND11_MODULE(_autogen, m) {
     py::set_shared_data("is_dry_run", &CodeGenData<BaseScalar>::is_dry_run);
     py::set_shared_data("call_hierarchy",
                         &CodeGenData<BaseScalar>::call_hierarchy);
-
-    // std::cout << "when calling independent: ";
-    // print_invocation_order();
 
     py::set_shared_data("invocation_order",
                         CodeGenData<BaseScalar>::invocation_order);
@@ -367,6 +369,13 @@ PYBIND11_MODULE(_autogen, m) {
            "Compile to a GPU-bound shared library",
            py::call_guard<py::scoped_ostream_redirect,
                           py::scoped_estream_redirect>())
+      .def_readwrite("optimization_level",
+                     &autogen::GeneratedCodeGen::optimization_level)
+      .def_readwrite("generate_forward",
+                     &autogen::GeneratedCodeGen::generate_forward)
+      .def_readwrite("generate_jacobian",
+                     &autogen::GeneratedCodeGen::generate_jacobian)
+      .def_readwrite("debug_mode", &autogen::GeneratedCodeGen::debug_mode)
       .def_property_readonly("local_input_dim",
                              &autogen::GeneratedCodeGen::local_input_dim)
       .def_property_readonly("output_dim",
@@ -377,7 +386,24 @@ PYBIND11_MODULE(_autogen, m) {
                     &autogen::GeneratedCodeGen::set_global_input_dim)
       .def_property_readonly("is_compiled",
                              &autogen::GeneratedCodeGen::is_compiled)
-      .def_readwrite("debug_mode", &autogen::GeneratedCodeGen::debug_mode)
+      .def_property("target", &autogen::GeneratedCodeGen::target,
+                    &autogen::GeneratedCodeGen::set_target)
+      .def("set_cpu_compiler_clang",
+           &autogen::GeneratedCodeGen::set_cpu_compiler_clang,
+           py::arg("compiler_path") = "",
+           py::arg("compile_flags") = std::vector<std::string>{},
+           py::arg("compile_lib_flags") = std::vector<std::string>{})
+      .def("set_cpu_compiler_gcc",
+           &autogen::GeneratedCodeGen::set_cpu_compiler_gcc,
+           py::arg("compiler_path") = "",
+           py::arg("compile_flags") = std::vector<std::string>{},
+           py::arg("compile_lib_flags") = std::vector<std::string>{})
+      .def("set_cpu_compiler_msvc",
+           &autogen::GeneratedCodeGen::set_cpu_compiler_msvc,
+           py::arg("compiler_path") = "", py::arg("linker_path") = "",
+           py::arg("compile_flags") = std::vector<std::string>{},
+           py::arg("compile_lib_flags") = std::vector<std::string>{})
+
       .def("discard_library", &autogen::GeneratedCodeGen::discard_library)
       .def_property("library_name", &autogen::GeneratedCodeGen::library_name,
                     &autogen::GeneratedCodeGen::load_precompiled_library);

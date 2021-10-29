@@ -31,6 +31,11 @@ class GeneratedCodeGen : public GeneratedBase {
   using CGScalar = typename CppAD::AD<CppAD::cg::CG<BaseScalar>>;
   using ADFun = typename FunctionTrace<BaseScalar>::ADFun;
 
+  using AbstractCCompiler = typename CppAD::cg::AbstractCCompiler<double>;
+  using MsvcCompiler = typename CppAD::cg::MsvcCompiler<double>;
+  using ClangCompiler = typename CppAD::cg::ClangCompiler<double>;
+  using GccCompiler = typename CppAD::cg::GccCompiler<double>;
+
  private:
   using CGAtomicFunBridge =
       typename FunctionTrace<BaseScalar>::CGAtomicFunBridge;
@@ -67,11 +72,6 @@ class GeneratedCodeGen : public GeneratedBase {
   int num_gpu_threads_per_block{32};
 
   /**
-   * Absolute path of the Clang compiler.
-   */
-  std::string clang_path;
-
-  /**
    * Whether the generated code is compiled in debug mode (only applies to CPU
    * and CUDA).
    */
@@ -81,16 +81,27 @@ class GeneratedCodeGen : public GeneratedBase {
    * Optimization level to use when compiling CPU and CUDA code.
    * Will be 0 when debug_mode is active.
    */
-  int optimization_level{1};
+  int optimization_level{2};
+
+  /**
+   * Whether to generate code for the zero-order forward mode.
+   */
+  bool generate_forward{true};
+
+  /**
+   * Whether to generate code for the Jacobian.
+   */
+  bool generate_jacobian{true};
 
   CodeGenTarget target() const { return target_; }
   void set_target(CodeGenTarget target) { target_ = target; }
+
+  std::shared_ptr<AbstractCCompiler> cpu_compiler{nullptr};
 
   GeneratedCodeGen(const FunctionTrace<BaseScalar> &main_trace)
       : name_(main_trace.name), main_trace_(main_trace) {
     output_dim_ = main_trace_.output_dim;
     local_input_dim_ = main_trace_.input_dim;
-    init();
   }
 
   GeneratedCodeGen(const std::string &name, std::shared_ptr<ADFun> tape)
@@ -100,16 +111,59 @@ class GeneratedCodeGen : public GeneratedBase {
     local_input_dim_ = static_cast<int>(tape->Domain());
     std::cout << "tape->Range():  " << tape->Range() << std::endl;
     std::cout << "tape->Domain(): " << tape->Domain() << std::endl;
-    init();
   }
 
-  void init() {
-    clang_path = autogen::find_exe("clang", false);
-    if (clang_path.empty()) {
-      throw std::runtime_error(
-          "Clang path is empty, make sure clang is "
-          "available on the system path or provide it manually to the "
-          "GeneratedCodegen instance.");
+  void set_cpu_compiler_clang(
+      std::string compiler_path = "",
+      const std::vector<std::string> &compile_flags =
+          std::vector<std::string>{},
+      const std::vector<std::string> &compile_lib_flags = {}) {
+    if (compiler_path.empty()) {
+      compiler_path = autogen::find_exe("clang");
+    }
+    cpu_compiler = std::make_shared<ClangCompiler>(compiler_path);
+    for (const auto &flag : compile_flags) {
+      cpu_compiler->addCompileFlag(flag);
+    }
+    for (const auto &flag : compile_lib_flags) {
+      cpu_compiler->addCompileLibFlag(flag);
+    }
+  }
+
+  void set_cpu_compiler_gcc(
+      std::string compiler_path = "",
+      const std::vector<std::string> &compile_flags =
+          std::vector<std::string>{},
+      const std::vector<std::string> &compile_lib_flags = {}) {
+    if (compiler_path.empty()) {
+      compiler_path = autogen::find_exe("gcc");
+    }
+    cpu_compiler = std::make_shared<GccCompiler>(compiler_path);
+    for (const auto &flag : compile_flags) {
+      cpu_compiler->addCompileFlag(flag);
+    }
+    for (const auto &flag : compile_lib_flags) {
+      cpu_compiler->addCompileLibFlag(flag);
+    }
+  }
+
+  void set_cpu_compiler_msvc(
+      std::string compiler_path = "", std::string linker_path = "",
+      const std::vector<std::string> &compile_flags =
+          std::vector<std::string>{},
+      const std::vector<std::string> &compile_lib_flags = {}) {
+    if (compiler_path.empty()) {
+      compiler_path = autogen::find_exe("cl.exe");
+    }
+    if (linker_path.empty()) {
+      linker_path = autogen::find_exe("link.exe");
+    }
+    cpu_compiler = std::make_shared<MsvcCompiler>(compiler_path, linker_path);
+    for (const auto &flag : compile_flags) {
+      cpu_compiler->addCompileFlag(flag);
+    }
+    for (const auto &flag : compile_lib_flags) {
+      cpu_compiler->addCompileLibFlag(flag);
     }
   }
 
@@ -232,7 +286,8 @@ class GeneratedCodeGen : public GeneratedBase {
     using namespace CppAD::cg;
 
     ModelCSourceGen<BaseScalar> main_source_gen(*(main_trace_.tape), name_);
-    main_source_gen.setCreateJacobian(true);
+    main_source_gen.setCreateForwardZero(generate_forward);
+    main_source_gen.setCreateJacobian(generate_jacobian);
     ModelLibraryCSourceGen<BaseScalar> libcgen(main_source_gen);
     // reverse order of invocation to first generate code for innermost
     // functions
@@ -243,41 +298,49 @@ class GeneratedCodeGen : public GeneratedBase {
           (*CodeGenData<BaseScalar>::traces)[*it];
       // trace.tape->optimize();
       auto *source_gen = new ModelCSourceGen<BaseScalar>(*(trace.tape), *it);
-      // source_gen->setCreateSparseJacobian(true);
-      // source_gen->setCreateJacobian(true);
-      source_gen->setCreateForwardOne(true);
-      source_gen->setCreateReverseOne(true);
+      source_gen->setCreateForwardZero(generate_forward);
+      // source_gen->setCreateSparseJacobian(generate_jacobian);
+      // source_gen->setCreateJacobian(generate_jacobian);
+      source_gen->setCreateForwardOne(generate_jacobian);
+      source_gen->setCreateReverseOne(generate_jacobian);
       models.push_back(source_gen);
       // we need a stable reference
       libcgen.addModel(*(models.back()));
     }
     libcgen.setVerbose(true);
-    // #if AUTOGEN_SYSTEM_WIN
-    //     SaveFilesModelLibraryProcessor<double> psave(libcgen);
-    //     psave.saveSourcesTo(name_ + "_cpu_srcs");
-    //     std::cerr << "CPU code compilation is not yet available on Windows.
-    //     Saved "
-    //                  "source files to \""
-    //               << name_ << "_cpu_srcs"
-    //               << "\".\n ";
-    //     std::exit(1);
-    // #else
+
     DynamicModelLibraryProcessor<BaseScalar> p(libcgen);
-    auto compiler = std::make_unique<ClangCompiler<BaseScalar>>(clang_path);
-    compiler->setSourcesFolder(name_ + "_cpu_srcs");
-    compiler->setTemporaryFolder(name_ + "_cpu_tmp");
-    compiler->setSaveToDiskFirst(true);
+
+    // if (clang_path.empty()) {
+    //   clang_path = autogen::find_exe("clang", false);
+    // }
+    // if (clang_path.empty()) {
+    //   throw std::runtime_error(
+    //       "Clang path is empty, make sure clang is "
+    //       "available on the system path or provide it manually to the "
+    //       "GeneratedCodegen instance.");
+    // }
+    // auto compiler = std::make_unique<ClangCompiler<BaseScalar>>(clang_path);
+    if (!cpu_compiler) {
+#if AUTOGEN_SYSTEM_WIN
+      set_cpu_compiler_msvc();
+#else
+      set_cpu_compiler_clang();
+#endif
+    }
+    cpu_compiler->setSourcesFolder(name_ + "_cpu_srcs");
+    cpu_compiler->setTemporaryFolder(name_ + "_cpu_tmp");
+    cpu_compiler->setSaveToDiskFirst(true);
     if (debug_mode) {
-      compiler->addCompileFlag("-g");
-      compiler->addCompileFlag("-O0");
+      cpu_compiler->addCompileFlag("-g");
+      cpu_compiler->addCompileFlag("-O0");
     } else {
-      compiler->addCompileFlag("-O" + std::to_string(optimization_level));
+      cpu_compiler->addCompileFlag("-O" + std::to_string(optimization_level));
     }
     p.setLibraryName(name_ + "_cpu");
     bool load_library = false;  // we do this in another step
-    p.createDynamicLibrary(*compiler, load_library);
+    p.createDynamicLibrary(*cpu_compiler, load_library);
     library_name_ = "./" + name_ + "_cpu";
-    // #endif
     target_ = TARGET_CPU;
   }
 
@@ -293,7 +356,6 @@ class GeneratedCodeGen : public GeneratedBase {
       for (auto &name : model_names) {
         std::cout << "  Found model " << name << std::endl;
       }
-      // return cpu_library_->model(name_);
       // load and wire up atomic functions in this library
       const auto &order = *CodeGenData<BaseScalar>::invocation_order;
       const auto &hierarchy = CodeGenData<BaseScalar>::call_hierarchy;
@@ -328,37 +390,10 @@ class GeneratedCodeGen : public GeneratedBase {
         cpu_models_[parent]->addAtomicFunction(atomic_model->asAtomic());
       }
 
-      // for (const std::string &model_name : order) {
-      //   // we have to keep the atomic function pointers alive
-      //   cpu_models_[model_name] =
-      //       GenericModelPtr(cpu_library_->model(model_name).get());
-      //   if (!cpu_models_[model_name]) {
-      //     throw std::runtime_error("Failed to load atomic function \"" +
-      //                              model_name + "\" from library " +
-      //                              library_name_ + library_ext_);
-      //   }
-      //   // simply add every atomic to the top-level function
-      //   // (because we don't have hierarchy information for the top-level
-      //   // function)
-      //   cpu_models_[name_]->addAtomicFunction(
-      //       cpu_models_[model_name]->asAtomic());
-      // }
-      // for (const auto &[outer, inner_models] : hierarchy) {
-      //   auto &outer_model = cpu_models_[outer];
-      //   for (const std::string &inner : inner_models) {
-      //     auto &inner_model = cpu_models_[inner];
-      //     outer_model->addAtomicFunction(inner_model->asAtomic());
-      //     std::cout << "Connected atomic function \"" + inner +
-      //                      "\" to its parent function \""
-      //               << outer << "\".\n";
-      //   }
-      // }
-
       std::cout << "Loaded compiled model \"" << name_ << "\" from \""
                 << library_name_ << "\".\n";
       cpu_library_loading_mutex_.unlock();
     }
-    // return cpu_library_->model(name_);
     return cpu_models_[name_];
   }
 
@@ -375,7 +410,8 @@ class GeneratedCodeGen : public GeneratedBase {
     std::cout << std::endl;
 
     CudaModelSourceGen<BaseScalar> main_source_gen(*(main_trace_.tape), name_);
-    main_source_gen.setCreateJacobian(true);
+    main_source_gen.setCreateForwardZero(generate_forward);
+    main_source_gen.setCreateJacobian(generate_jacobian);
     main_source_gen.global_input_dim() = global_input_dim_;
     main_source_gen.jacobian_acc_method() = jac_acc_method_;
     CudaLibraryProcessor<BaseScalar> cuda_proc(&main_source_gen,
@@ -389,8 +425,8 @@ class GeneratedCodeGen : public GeneratedBase {
       FunctionTrace<BaseScalar> &trace =
           (*CodeGenData<BaseScalar>::traces)[*it];
       auto *source_gen = new CudaModelSourceGen<BaseScalar>(*(trace.tape), *it);
-      source_gen->setCreateForwardOne(true);
-      source_gen->setCreateReverseOne(true);
+      source_gen->setCreateForwardOne(generate_jacobian);
+      source_gen->setCreateReverseOne(generate_jacobian);
       source_gen->set_kernel_only(true);
       models.push_back(source_gen);
       cuda_proc.add_model(models.back(), false);

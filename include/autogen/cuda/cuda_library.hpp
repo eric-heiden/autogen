@@ -63,7 +63,7 @@ class CudaLibrary {
     assert(found);
     lib_handle_ = LoadLibrary(abs_path.c_str());
     if (lib_handle_ == nullptr) {
-      throw std::runtime_error("Failed to dynamically load library '" +
+      throw std::runtime_error("Failed to dynamically load CUDA library '" +
                                library_basename + "' (error code " +
                                std::to_string(GetLastError()) +
                                "): " + GetLastErrorAsString());
@@ -78,7 +78,7 @@ class CudaLibrary {
     lib_handle_ = dlopen(abs_path.c_str(), dlOpenMode);
     // _dynLibHandle = dlmopen(LM_ID_NEWLM, path.c_str(), RTLD_NOW);
     if (lib_handle_ == nullptr) {
-      throw std::runtime_error("Failed to dynamically load library '" +
+      throw std::runtime_error("Failed to dynamically load CUDA library '" +
                                library_basename +
                                "': " + std::string(dlerror()));
     }
