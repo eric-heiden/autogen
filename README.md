@@ -50,9 +50,8 @@ The following features are available on the different operating systems:
 | CUDA code generation | ✅ (NVCC)       | ✅ (NVCC)        |
 
 ### Windows CPU Support
-CPU-bound code compilation on Windows is only available through the Clang compiler at the moment.
-Make sure `clang.exe` is available on the system path, it might be necessary to first load the build variables in the console session by running
+CPU-bound code compilation on Windows is available through Microsoft Visual C++ (MSVC) and the Clang compiler at the moment.
+Depending on the selected compiler/linker, make sure `cl.exe` and `link.exe`, or `clang.exe` are available on the system path. It might be necessary to first load the build variables in the console session by running
 ```
 "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 ```
-
