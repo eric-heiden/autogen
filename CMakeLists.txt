@@ -8,12 +8,8 @@ cmake_policy(SET CMP0079 NEW)
 
 set(CMAKE_CXX_STANDARD 17)
 if(MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj /std:c++17")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj /std:c++17 /openmp")
 endif(MSVC)
-
-#file (GLOB AUTOGEN_HDRS "${CMAKE_CURRENT_LIST_DIR}/include/autogen/cuda/*.hpp"
-#        "${CMAKE_CURRENT_LIST_DIR}/include/autogen/utils/*.hpp"
-#        "${CMAKE_CURRENT_LIST_DIR}/include/autogen/autogen.hpp")
 
 find_package(Eigen3)
 find_package(Threads REQUIRED)
