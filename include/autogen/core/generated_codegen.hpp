@@ -218,7 +218,7 @@ class GeneratedCodeGen : public GeneratedBase {
           static thread_local std::vector<BaseScalar> input;
           input = global_input;
           input.resize(global_input.size() + local_inputs[0].size());
-          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+          for (size_t j = 0; j < local_inputs[i].size(); ++j) {
             input[j + global_input.size()] = local_inputs[i][j];
           }
           auto model = get_cpu_model();
@@ -267,7 +267,7 @@ class GeneratedCodeGen : public GeneratedBase {
             input.insert(input.begin(), global_input.begin(),
                          global_input.end());
           }
-          for (size_t j = 0; j < local_inputs[i].size(); ++i) {
+          for (size_t j = 0; j < local_inputs[i].size(); ++j) {
             input[j + global_input.size()] = local_inputs[i][j];
           }
           auto model = get_cpu_model();

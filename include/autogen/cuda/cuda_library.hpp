@@ -102,6 +102,9 @@ class CudaLibrary {
   }
 
   virtual ~CudaLibrary() {
+    // clear models, which will deallocate GPU memory
+    // before the library is unloaded
+    models_.clear();
 #if CPPAD_CG_SYSTEM_WIN
     FreeLibrary((HMODULE)lib_handle_);
 #else

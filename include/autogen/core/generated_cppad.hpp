@@ -16,12 +16,16 @@
 namespace autogen {
 class GeneratedCppAD : public GeneratedBase {
   using ADScalar = typename CppAD::AD<BaseScalar>;
+  using Functor = typename std::function<void(const std::vector<ADScalar>&,
+                                              std::vector<ADScalar>&)>;
 
  private:
   std::shared_ptr<CppAD::ADFun<BaseScalar>> tape_{nullptr};
 
   std::vector<ADScalar> ax_;
   std::vector<ADScalar> ay_;
+
+  Functor functor_;
 
  protected:
   using GeneratedBase::global_input_dim_;
@@ -38,23 +42,21 @@ class GeneratedCppAD : public GeneratedBase {
   GeneratedCppAD(std::shared_ptr<CppAD::ADFun<BaseScalar>> tape)
       : tape_(tape) {}
 
-  GeneratedCppAD(
-      std::function<void(const std::vector<ADScalar>&, std::vector<ADScalar>&)>
-          functor,
-      const std::vector<BaseScalar>& input) {
-    ax_.resize(input.size());
-    // TODO resize ay_?
-    for (size_t i = 0; i < input.size(); ++i) {
-      ax_[i] = ADScalar(input[i]);
-    }
-    CppAD::Independent(ax_);
-    functor(ax_, ay_);
-    tape_ = std::make_shared<CppAD::ADFun<BaseScalar>>();
-    tape_->Dependent(ax_, ay_);
+  GeneratedCppAD(Functor functor, const std::vector<BaseScalar>& input)
+      : functor_(functor) {
+    conditionally_trace_(input);
+  }
+
+  void clear() {
+    tape_.reset();
+    ax_.clear();
+    ay_.clear();
+    ADScalar::abort_recording();
   }
 
   void operator()(const std::vector<BaseScalar>& input,
                   std::vector<BaseScalar>& output) override {
+    conditionally_trace_(input);
     output = tape_->Forward(0, input);
   }
 
@@ -79,6 +81,7 @@ class GeneratedCppAD : public GeneratedBase {
 
   void jacobian(const std::vector<BaseScalar>& input,
                 std::vector<BaseScalar>& output) override {
+    conditionally_trace_(input);
     output = tape_->Jacobian(input);
   }
 
@@ -100,6 +103,27 @@ class GeneratedCppAD : public GeneratedBase {
         jacobian(input, outputs[i]);
       }
     }
+  }
+
+ protected:
+  void conditionally_trace_(const std::vector<BaseScalar>& input) {
+    if (tape_) {
+      return;
+    }
+    if (!functor_) {
+      throw std::runtime_error(
+          "GeneratedCppAD cannot (re)trace the function because it was "
+          "constructed without a function pointer. Make sure to call the "
+          "constructor to GeneratedCppAD which accepts the function pointer.");
+    }
+    ax_.resize(input.size());
+    for (size_t i = 0; i < input.size(); ++i) {
+      ax_[i] = ADScalar(input[i]);
+    }
+    CppAD::Independent(ax_);
+    functor_(ax_, ay_);
+    tape_ = std::make_shared<CppAD::ADFun<BaseScalar>>();
+    tape_->Dependent(ax_, ay_);
   }
 };
 }  // namespace autogen

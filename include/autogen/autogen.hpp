@@ -62,9 +62,9 @@ struct Generated {
   std::unique_ptr<GeneratedCppAD> gen_cppad_{nullptr};
   std::unique_ptr<GeneratedCodeGen> gen_cg_{nullptr};
 
-  size_t local_input_dim_{0};
-  size_t global_input_dim_{0};
-  size_t output_dim_{0};
+  int local_input_dim_{0};
+  int global_input_dim_{0};
+  int output_dim_{0};
 
   bool debug_mode_{false};
 
@@ -86,6 +86,11 @@ struct Generated {
     if (mode != this->mode_) {
       // changing the mode discards the previously compiled library
       discard_library();
+      if (this->mode_ == GENERATE_CPPAD) {
+        // make sure the old CppAD tape gets removed,
+        // there can only be one at a time
+        gen_cppad_->clear();
+      }
     }
     this->mode_ = mode;
   }
@@ -113,19 +118,17 @@ struct Generated {
     this->jac_acc_method_ = jac_acc_method;
   }
 
-  size_t input_dim() const { return local_input_dim_ + global_input_dim_; }
-  size_t local_input_dim() const { return local_input_dim_; }
-  size_t output_dim() const { return output_dim_; }
+  int input_dim() const { return local_input_dim_ + global_input_dim_; }
+  int local_input_dim() const { return local_input_dim_; }
+  int output_dim() const { return output_dim_; }
 
   bool debug_mode() const { return debug_mode_; }
-  void set_debug_mode(bool debug_mode = true) {
-    debug_mode_ = debug_mode;
-  }
+  void set_debug_mode(bool debug_mode = true) { debug_mode_ = debug_mode; }
 
-  size_t global_input_dim() const { return global_input_dim_; }
-  void set_global_input_dim(size_t global_input_dim) {
+  int global_input_dim() const { return global_input_dim_; }
+  void set_global_input_dim(int global_input_dim) {
     if (global_input_dim != global_input_dim_) {
-      //      discard_library();
+      // discard_library();
     }
     global_input_dim_ = global_input_dim;
   }
@@ -145,8 +148,7 @@ struct Generated {
 
   bool is_compiling() const {
     //    std::lock_guard<std::mutex> guard(compilation_mutex_);
-    //    return is_compiling_;
-    return false;
+    return is_compiling_;
   }
 
   void operator()(const std::vector<BaseScalar>& input,
@@ -197,13 +199,6 @@ struct Generated {
       return;
     }
 
-    if (!is_compiled()) {
-      throw std::runtime_error("The function \"" + name +
-                               "\" has not yet been compiled in " + str(mode_) +
-                               " mode. You need to call the forward pass first "
-                               "to trigger the compilation of the Jacobian.\n");
-    }
-
     gen_cg_->jacobian(input, output);
   }
 
@@ -219,13 +214,6 @@ struct Generated {
     if (mode_ == GENERATE_CPPAD) {
       gen_cppad_->jacobian(local_inputs, outputs, global_input);
       return;
-    }
-
-    if (!is_compiled()) {
-      throw std::runtime_error("The function \"" + name +
-                               "\" has not yet been compiled in " + str(mode_) +
-                               " mode. You need to call the forward pass first "
-                               "to trigger the compilation of the Jacobian.\n");
     }
 
     gen_cg_->jacobian(local_inputs, outputs, global_input);
@@ -283,10 +271,6 @@ struct Generated {
 
       assert(!input.empty());
       assert(!output.empty());
-      std::vector<CppAD::cg::CG<BaseScalar>> cg_input(input.size());
-      std::vector<CppAD::cg::CG<BaseScalar>> cg_output(output.size());
-      for (size_t i = 0; i < input.size(); ++i) {
-      }
       FunctionTrace<BaseScalar> t = autogen::trace(*f_cg_, name, input, output);
       gen_cg_ = std::make_unique<GeneratedCodeGen>(t);
       gen_cg_->debug_mode = debug_mode_;
