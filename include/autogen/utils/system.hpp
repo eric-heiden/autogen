@@ -36,9 +36,10 @@ static std::string exec(const std::string &cmd,
   msg.erase(std::remove(msg.begin(), msg.end(), '\n'), msg.end());
   msg.erase(std::remove(msg.begin(), msg.end(), '\r'), msg.end());
   if (code != 0 && throw_exception_on_error) {
-    std::stringstream ss(cmd);
+    std::stringstream ss;
+    ss << cmd;
     for (const auto &arg : args) {
-      ss << arg << " ";
+      ss << " " << arg;
     }
     throw std::runtime_error("Error: command \"" + ss.str() +
                              "\" returned exit code " + std::to_string(code) +
@@ -55,22 +56,29 @@ static bool file_exists(const std::string &filename) {
 // returns the absolute path of the executable
 static std::string find_exe(const std::string &name,
                             bool throw_exception_on_error = true) {
+  try {
 #if AUTOGEN_SYSTEM_WIN
-  std::string path =
-      autogen::exec("powershell",
-                    std::vector<std::string>{
-                        "-command", "\"(get-command " + name + ").Path\""},
-                    throw_exception_on_error);
+    std::string path =
+        autogen::exec("powershell",
+                      std::vector<std::string>{
+                          "-command", "\"(get-command " + name + ").Path\""},
+                      throw_exception_on_error);
 #else
-  std::string path = autogen::exec("which", std::vector<std::string>{name},
-                                   throw_exception_on_error);
+    std::string path =
+        autogen::exec("/usr/bin/which", std::vector<std::string>{name},
+                      throw_exception_on_error);
 #endif
-  if (!file_exists(path)) {
-    if (throw_exception_on_error) {
-      throw std::runtime_error("Error: could not find executable " + name);
+    if (!file_exists(path)) {
+      if (throw_exception_on_error) {
+        throw std::runtime_error("Error: could not find executable \"" + name +
+                                 "\"");
+      }
+      return "";
     }
-    return "";
+    return path;
+  } catch (CppAD::cg::CGException &e) {
+    throw std::runtime_error("Error: could not find executable \"" + name +
+                             "\"");
   }
-  return path;
 }
 }  // namespace autogen
