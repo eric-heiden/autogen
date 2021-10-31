@@ -205,7 +205,7 @@ PYBIND11_MODULE(_autogen, m) {
     // XXX save tape table for thread 0
     py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
     py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
-    py::set_shared_data("atomic_index_infos", ADCGScalar::atomic_index_infos);
+    py::set_shared_data("atomic_index_infos", CppAD::atomic_index_infos);
     py::set_shared_data("traces", CodeGenData<BaseScalar>::traces);
     py::set_shared_data("is_dry_run", &CodeGenData<BaseScalar>::is_dry_run);
     py::set_shared_data("call_hierarchy",
@@ -214,7 +214,7 @@ PYBIND11_MODULE(_autogen, m) {
     py::set_shared_data("invocation_order",
                         CodeGenData<BaseScalar>::invocation_order);
     // std::cout << "ADCG Atomic index infos has "
-    //           << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+    //           << CppAD::atomic_index_infos->size() << " entries.\n";
   });
 
   py::class_<autogen::GeneratedCppAD>(m, "GeneratedCppAD")
