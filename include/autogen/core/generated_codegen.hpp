@@ -63,7 +63,7 @@ class GeneratedCodeGen : public GeneratedBase {
 #if AUTOGEN_SYSTEM_WIN
   typedef CppAD::cg::WindowsDynamicLib<BaseScalar> DynamicLib;
 #else
-  typedef CppAD::cg::PosixDynamicLib<BaseScalar> DynamicLib;
+  typedef CppAD::cg::LinuxDynamicLib<BaseScalar> DynamicLib;
 #endif
   mutable std::shared_ptr<DynamicLib> cpu_library_{nullptr};
   mutable std::map<std::string, GenericModelPtr> cpu_models_;

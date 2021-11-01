@@ -90,7 +90,7 @@ void retrieve_tape<ADScalar>() {
   // std::cout << "Retrieving ADScalar tape table...\n";
   ADScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<double>*>(
       py::get_shared_data("tape_table_ad"));
-  // ADScalar::atomic_index_infos =
+  // CppAD::atomic_index_infos =
   //    std::shared_ptr<std::vector<CppAD::local::atomic_index_info>>(
   //    reinterpret_cast<std::vector<CppAD::local::atomic_index_info>*>(
   //         py::get_shared_data("atomic_index_infos_ad")));
@@ -106,7 +106,7 @@ void retrieve_tape<ADScalar>() {
   //     reinterpret_cast<std::vector<std::string>*>(
   //         py::get_shared_data("invocation_order"));
   // std::cout << "AD restored Atomic index infos has "
-  //           << ADScalar::atomic_index_infos->size() << " entries.\n";
+  //           << CppAD::atomic_index_infos->size() << " entries.\n";
 }
 
 void print_invocation_order() {
@@ -132,14 +132,14 @@ void retrieve_shared_ptr(T** target, const std::string& name) {
 template <>
 void retrieve_tape<ADCGScalar>() {
   // std::cout << "before retrieving tape ADCG restored Atomic index infos has "
-  //           << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+  //           << CppAD::atomic_index_infos->size() << " entries.\n";
   // std::cout << "Retrieving ADCGScalar tape table...\n";
   ADCGScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<CGScalar>*>(
       py::get_shared_data("tape_table_adcg"));
   ADCGScalar::tape_id_table =
       reinterpret_cast<CppAD::tape_id_t*>(py::get_shared_data("tape_id_table"));
-  retrieve_shared_ptr(&ADCGScalar::atomic_index_infos, "atomic_index_infos");
-  // ADCGScalar::atomic_index_infos =
+  retrieve_shared_ptr(&CppAD::atomic_index_infos, "atomic_index_infos");
+  // CppAD::atomic_index_infos =
   //     std::shared_ptr<std::vector<CppAD::local::atomic_index_info>>(reinterpret_cast<std::vector<CppAD::local::atomic_index_info>*>(
   //         py::get_shared_data("atomic_index_infos_adcg")));
   // autogen::CodeGenData<autogen::BaseScalar>::traces = reinterpret_cast<
@@ -164,7 +164,7 @@ void retrieve_tape<ADCGScalar>() {
   // std::cout << "after retrieved tape data:  ";
   // print_invocation_order();
   // std::cout << "ADCG restored Atomic index infos has "
-  //           << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+  //           << CppAD::atomic_index_infos->size() << " entries.\n";
 }
 
 template <>

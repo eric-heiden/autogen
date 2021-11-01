@@ -45,7 +45,12 @@ def vector(xs):
     return ADCGVector([ADCGScalar(x) for x in xs])
 
 
+scalar_atomics = set()
+
+
 def call_atomic(name: str, function, input):
+    global scalar_atomics
+    
     if get_mode() != Mode.CODEGEN:
         return function(input)
 
@@ -55,12 +60,21 @@ def call_atomic(name: str, function, input):
         ad_x = ADCGVector([ADCGScalar(to_double(x)) for x in input])
         independent(ad_x)
         ys = function(ad_x)
-        ad_y = ADCGVector([ADCGScalar(y) for y in ys])
+        if isinstance(ys, ADCGScalar):  
+            # this atomic function only returns a scalar          
+            ad_y = ADCGVector([ys])
+            scalar_atomics.add(name)
+        else:
+            ad_y = ADCGVector([ADCGScalar(y) for y in ys])
 
         tape = ADCGFun(ad_x, ad_y)
         CodeGenData.register_trace(name, tape)
+        if name in scalar_atomics:
+            return ad_y[0]
         return ad_y
 
+    if name in scalar_atomics:
+        return CodeGenData.call_bridge(name, ADCGVector(input))[0]
     return CodeGenData.call_bridge(name, ADCGVector(input))
 
 
@@ -71,6 +85,7 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
     Vector = vector_type()
 
     CodeGenData.clear()
+    scalar_atomics.clear()
 
     print("Dry run...")
     # first, a "dry run" to discover the atomic functions
