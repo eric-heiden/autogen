@@ -14,7 +14,8 @@
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
 
-namespace py = pybind11;
+namespace py = pybind11;;
+;
 using namespace autogen;
 
 PYBIND11_MAKE_OPAQUE(ADVector);
@@ -170,8 +171,8 @@ PYBIND11_MODULE(_autogen, m) {
           [](const std::shared_ptr<ADFun>& fun) { return fun->Range(); })
       .def("optimize",
            [](std::shared_ptr<ADFun>& fun) { return fun->optimize(); });
-      // .def("to_json", &ADFun::to_json,
-      //      "Represents the traced function by a JSON string");
+  // .def("to_json", &ADFun::to_json,
+  //      "Represents the traced function by a JSON string");
 
   m.def("independent", [](ADVector& x) {
     CppAD::Independent(x);
@@ -215,6 +216,19 @@ PYBIND11_MODULE(_autogen, m) {
                         CodeGenData<BaseScalar>::invocation_order);
     // std::cout << "ADCG Atomic index infos has "
     //           << CppAD::atomic_index_infos->size() << " entries.\n";
+  });
+
+  m.def("init_shared_data", []() {
+    py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
+    py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
+    py::set_shared_data("atomic_index_infos", CppAD::atomic_index_infos);
+    py::set_shared_data("traces", CodeGenData<BaseScalar>::traces);
+    py::set_shared_data("is_dry_run", &CodeGenData<BaseScalar>::is_dry_run);
+    py::set_shared_data("call_hierarchy",
+                        &CodeGenData<BaseScalar>::call_hierarchy);
+
+    py::set_shared_data("invocation_order",
+                        CodeGenData<BaseScalar>::invocation_order);
   });
 
   py::class_<autogen::GeneratedCppAD>(m, "GeneratedCppAD")
@@ -430,6 +444,10 @@ PYBIND11_MODULE(_autogen, m) {
                     }
                     order.push_back(name);
                   })
+      .def_static("is_dry_run",
+                  []() {
+                    return CodeGenData<BaseScalar>::is_dry_run;
+                  })
       .def_static("set_dry_run",
                   [](bool dry_run) {
                     CodeGenData<BaseScalar>::is_dry_run = dry_run;
@@ -447,13 +465,22 @@ PYBIND11_MODULE(_autogen, m) {
                 typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
             FunctionTrace<BaseScalar>& trace =
                 (*CodeGenData<BaseScalar>::traces)[name];
-            std::cout << "Adding trace for atomic function \"" << trace.name
+            std::cout << "Adding trace for atomic function \"" << name
                       << "\"...\n";
             trace.tape = tape;
             trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
             trace.input_dim = tape->Domain();
             trace.output_dim = tape->Range();
           })
+      .def_static("trace_existing_atomics",
+                  []() {
+                    // if (get_scope()->mode == SCALAR_CPPAD) {
+                    //   retrieve_tape<ADScalar>();
+                    // } else if (get_scope()->mode == SCALAR_CODEGEN) {
+                    //   retrieve_tape<ADCGScalar>();
+                    // }
+                    trace_existing_atomics();
+                  })
       .def_static("call_bridge", [](const std::string& name,
                                     const ADCGVector& input) {
         if (CodeGenData<BaseScalar>::traces->find(name) ==

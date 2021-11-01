@@ -130,11 +130,11 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
     trace.output_dim = static_cast<int>(output.size());
     // trace.ax.resize(input.size());
     // trace.ay.resize(output.size());
-    // for (size_t i = 0; i < input.size(); ++i) {
-    //   BaseScalar raw = to_double(input[i]);
-    //   trace.trace_input[i] = raw;
-    //   trace.ax[i] = ADCGScalar(raw);
-    // }
+    for (size_t i = 0; i < input.size(); ++i) {
+      BaseScalar raw = to_double(input[i]);
+      trace.trace_input[i] = raw;
+      // trace.ax[i] = ADCGScalar(raw);
+    }
     // CppAD::Independent(trace.ax);
     // trace.functor(trace.ax, trace.ay);
     // trace.tape = std::make_shared<ADFun>();
@@ -176,7 +176,7 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
   FunctionTrace<BaseScalar> &trace = (*traces)[name];
   if (!trace.bridge) {
     throw std::runtime_error("CGAtomicFunBridge for atomic function \"" + name +
-                             "\" is missing");
+                             "\" is missing. Make sure to call `trace_existing_atomics()`.");
   }
   (*(trace.bridge))(input, output);
 
@@ -185,6 +185,35 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
   //   std::cout << s << " ";
   // }
   // std::cout << std::endl;
+}
+
+void trace_existing_atomics() {
+  using CGScalar = typename CppAD::cg::CG<BaseScalar>;
+  using ADCGScalar = typename CppAD::AD<CGScalar>;
+  using ADFun = typename CppAD::ADFun<CGScalar>;
+  using CGAtomicFunBridge = typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
+
+  const auto &order = *CodeGenData<BaseScalar>::invocation_order;
+  // for (auto it = order.rbegin(); it != order.rend(); ++it) {
+  for (auto& [name, trace] : *CodeGenData<BaseScalar>::traces) {
+    // FunctionTrace<BaseScalar> &trace = (*CodeGenData<BaseScalar>::traces)[*it];
+    if (trace.bridge) {
+      continue;
+    }
+    std::cout << "Tracing atomic function \"" << trace.name
+              << "\" for code generation...\n";
+    trace.ax.resize(trace.input_dim);
+    trace.ay.resize(trace.output_dim);
+    for (size_t i = 0; i < trace.input_dim; ++i) {
+      trace.ax[i] = ADCGScalar(to_double(trace.trace_input[i]));
+    }
+    CppAD::Independent(trace.ax);
+    trace.functor(trace.ax, trace.ay);
+    trace.tape = std::make_shared<ADFun>();
+    trace.tape->Dependent(trace.ax, trace.ay);
+    trace.tape->function_name_set(trace.name);
+    trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
+  }
 }
 
 template <typename Functor>
@@ -210,25 +239,7 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
   }
 
   // next, trace the inner atomic functions
-  const auto &order = *CodeGenData<BaseScalar>::invocation_order;
-  std::cout << "Function \"" << name << "\" has " << order.size()
-            << " atomic function(s).\n";
-  for (auto it = order.rbegin(); it != order.rend(); ++it) {
-    FunctionTrace<BaseScalar> &trace = (*CodeGenData<BaseScalar>::traces)[*it];
-    std::cout << "Tracing function \"" << trace.name
-              << "\" for code generation...\n";
-    trace.ax.resize(trace.input_dim);
-    trace.ay.resize(trace.output_dim);
-    for (size_t i = 0; i < trace.input_dim; ++i) {
-      trace.ax[i] = ADCGScalar(to_double(trace.trace_input[i]));
-    }
-    CppAD::Independent(trace.ax);
-    trace.functor(trace.ax, trace.ay);
-    trace.tape = std::make_shared<ADFun>();
-    trace.tape->Dependent(trace.ax, trace.ay);
-    trace.tape->function_name_set(trace.name);
-    trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
-  }
+  trace_existing_atomics();
 
   // finally, trace the top-level function
   FunctionTrace<BaseScalar> trace;

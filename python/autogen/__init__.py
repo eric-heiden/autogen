@@ -1,5 +1,9 @@
 from typing import Callable
+from collections import namedtuple
 from _autogen import *
+
+init_shared_data()
+# print("initialized shared data")
 
 def scalar_type():
     """
@@ -45,37 +49,55 @@ def vector(xs):
     return ADCGVector([ADCGScalar(x) for x in xs])
 
 
-scalar_atomics = set()
+# data corresponding to atomic functions defined in Python
+__scalar_atomics = set()  # names of atomics that return a scalar
+__trace_data = {}
+__trace_order = []
+__TraceData = namedtuple('TraceData', ['function', 'input'])
 
 
 def call_atomic(name: str, function, input):
-    global scalar_atomics
+    global __scalar_atomics
+    global __trace_data
+    global __trace_order
     
     if get_mode() != Mode.CODEGEN:
         return function(input)
 
-    if not CodeGenData.has_trace(name):
-        CodeGenData.update_call_hierarchy(name)
+    if CodeGenData.is_dry_run():
+        if name not in __trace_data:
+            CodeGenData.update_call_hierarchy(name)
+            __trace_order.insert(0, name)
+            raw_input = [to_double(x) for x in input]
+            __trace_data[name] = __TraceData(function, raw_input)
+            return function(input)
+        
+        return function(input)
 
-        ad_x = ADCGVector([ADCGScalar(to_double(x)) for x in input])
+    if name in __scalar_atomics:
+        return CodeGenData.call_bridge(name, ADCGVector(input))[0]
+    return CodeGenData.call_bridge(name, ADCGVector(input))
+
+
+def __trace_python_atomics():
+    """
+    Trace the atomic functions implemented in Python.
+    """
+    for name in __trace_order:
+        data = __trace_data[name]
+        ad_x = ADCGVector([ADCGScalar(x) for x in data.input])
         independent(ad_x)
-        ys = function(ad_x)
+        ys = data.function(ad_x)
         if isinstance(ys, ADCGScalar):  
             # this atomic function only returns a scalar          
             ad_y = ADCGVector([ys])
-            scalar_atomics.add(name)
+            __scalar_atomics.add(name)
+            ys = ADCGVector([ys])
         else:
             ad_y = ADCGVector([ADCGScalar(y) for y in ys])
-
         tape = ADCGFun(ad_x, ad_y)
         CodeGenData.register_trace(name, tape)
-        if name in scalar_atomics:
-            return ad_y[0]
-        return ad_y
-
-    if name in scalar_atomics:
-        return CodeGenData.call_bridge(name, ADCGVector(input))[0]
-    return CodeGenData.call_bridge(name, ADCGVector(input))
+        print(f'Registered trace for atomic function \"{name}\".')
 
 
 def trace(fun, xs, mode: Mode = Mode.CPPAD):
@@ -84,22 +106,29 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
     Scalar = scalar_type()
     Vector = vector_type()
 
-    CodeGenData.clear()
-    scalar_atomics.clear()
+    if mode == Mode.CODEGEN:
+        CodeGenData.clear()
+        __scalar_atomics.clear()
+        __trace_data.clear()
 
-    print("Dry run...")
-    # first, a "dry run" to discover the atomic functions
-    CodeGenData.set_dry_run(True)
+        print("Dry run...")
+        # first, a "dry run" to discover the atomic functions
+        CodeGenData.set_dry_run(True)
 
-    ad_x = Vector([Scalar(x) for x in xs])
-    independent(ad_x)
-    ys = fun(ad_x)
+        ad_x = Vector([Scalar(x) for x in xs])
+        # independent(ad_x)
+        ys = fun(ad_x)
 
-    CodeGenData.set_dry_run(False)
+        CodeGenData.set_dry_run(False)
 
-    print('The following atomic functions were discovered: [%s]' % ', '.join(CodeGenData.invocation_order))
+        print('The following atomic functions were discovered: [%s]' % ', '.join(CodeGenData.invocation_order))
+    
+        # trace existing atomics from some non-Python code
+        CodeGenData.trace_existing_atomics()
+        # trace atomics in Python code
+        __trace_python_atomics()
 
-    print("Final run...")
+        print("Final run...")
     # trace top-level function where the CGAtomicFunBridges are used
     ad_x = Vector([Scalar(x) for x in xs])
     independent(ad_x)
