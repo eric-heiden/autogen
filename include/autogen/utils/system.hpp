@@ -23,6 +23,8 @@
 #include <cppad/cg.hpp>
 #include <fstream>
 
+#include "filesystem.hpp"
+
 namespace autogen {
 static std::string exec(const std::string &cmd,
                         const std::vector<std::string> &args,
@@ -49,8 +51,13 @@ static std::string exec(const std::string &cmd,
 }
 
 static bool file_exists(const std::string &filename) {
-  std::ifstream file(filename);
-  return file.good();
+  namespace fs = std::filesystem;
+  return fs::exists(filename);
+}
+
+static bool directory_exists(const std::string &dirname) {
+  namespace fs = std::filesystem;
+  return fs::is_directory(dirname);
 }
 
 // returns the absolute path of the executable
