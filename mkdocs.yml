@@ -1,3 +1,13 @@
 site_name: autogen
+markdown_extensions:
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true 
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.snippets
 theme:
   name: material
+  features:
+    - content.tabs.link
