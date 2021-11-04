@@ -1,4 +1,4 @@
-project(autogen)
+project(autogen CXX)
 cmake_minimum_required(VERSION 3.13)
 
 cmake_policy(SET CMP0003 NEW)
@@ -59,11 +59,14 @@ INTERFACE
   ${CMAKE_CURRENT_BINARY_DIR}/CppADCodeGen/include
 )
 
-find_package(OpenMP REQUIRED)
+find_package(OpenMP)
 
 add_library(autogen INTERFACE)
 target_include_directories(autogen INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)
-target_link_libraries(autogen INTERFACE ${CMAKE_DL_LIBS} CppADCodeGen Threads::Threads OpenMP::OpenMP_CXX)
+target_link_libraries(autogen INTERFACE ${CMAKE_DL_LIBS} CppADCodeGen Threads::Threads)
+if (OpenMP_CXX_FOUND)
+  target_link_libraries(autogen INTERFACE OpenMP::OpenMP_CXX)
+endif (OpenMP_CXX_FOUND)
 if (Eigen_FOUND)
   target_link_libraries(autogen INTERFACE Eigen3::Eigen3)
   target_compile_definitions(autogen INTERFACE USE_EIGEN=1)
