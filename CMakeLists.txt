@@ -59,9 +59,11 @@ INTERFACE
   ${CMAKE_CURRENT_BINARY_DIR}/CppADCodeGen/include
 )
 
+find_package(OpenMP REQUIRED)
+
 add_library(autogen INTERFACE)
 target_include_directories(autogen INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)
-target_link_libraries(autogen INTERFACE ${CMAKE_DL_LIBS} CppADCodeGen Threads::Threads)
+target_link_libraries(autogen INTERFACE ${CMAKE_DL_LIBS} CppADCodeGen Threads::Threads OpenMP::OpenMP_CXX)
 if (Eigen_FOUND)
   target_link_libraries(autogen INTERFACE Eigen3::Eigen3)
   target_compile_definitions(autogen INTERFACE USE_EIGEN=1)
