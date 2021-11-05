@@ -3,6 +3,8 @@
 #include <memory>
 #include <vector>
 
+#include "autogen/utils/system.hpp"
+
 namespace autogen {
 using BaseScalar = double;
 
