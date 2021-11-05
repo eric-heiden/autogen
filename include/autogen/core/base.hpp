@@ -15,6 +15,8 @@ struct GeneratedBase {
   int output_dim_{-1};
 
  public:
+  virtual ~GeneratedBase() {}
+
   virtual int local_input_dim() const { return local_input_dim_; }
   virtual int global_input_dim() const { return global_input_dim_; }
   virtual void set_global_input_dim(int dim) { global_input_dim_ = dim; }
