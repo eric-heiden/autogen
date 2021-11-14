@@ -2,7 +2,7 @@ from typing import Callable
 from collections import namedtuple
 from _autogen import *
 
-init_shared_data()
+# init_shared_data()
 # print("initialized shared data")
 
 def scalar_type():

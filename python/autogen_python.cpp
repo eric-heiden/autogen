@@ -463,7 +463,7 @@ PYBIND11_MODULE(_autogen, m) {
           [](const std::string& name, const std::shared_ptr<ADCGFun>& tape) {
             using CGAtomicFunBridge =
                 typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
-            FunctionTrace<BaseScalar>& trace =
+            FunctionTrace& trace =
                 (*CodeGenData<BaseScalar>::traces)[name];
             std::cout << "Adding trace for atomic function \"" << name
                       << "\"...\n";
@@ -489,7 +489,7 @@ PYBIND11_MODULE(_autogen, m) {
                                    "\" while attempting to call the "
                                    "corresponding function bridge.");
         }
-        FunctionTrace<BaseScalar>& trace =
+        FunctionTrace& trace =
             (*CodeGenData<BaseScalar>::traces)[name];
         ADCGVector output(trace.output_dim);
         (*(trace.bridge))(input, output);

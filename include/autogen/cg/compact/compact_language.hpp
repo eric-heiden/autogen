@@ -1,15 +1,13 @@
 #pragma once
 
-#include <cppad/cg.hpp>
 #include <unordered_map>
 
-#include "cuda_variable_name_gen.hpp"
+#include "compact_variable_name_gen.hpp"
 
 namespace autogen {
-template <class Base>
-class LanguageCuda : public CppAD::cg::LanguageC<Base> {
+class LanguageCompact : public CppAD::cg::LanguageC<BaseScalar> {
  protected:
-  using LanguageC = CppAD::cg::LanguageC<Base>;
+  using LanguageC = CppAD::cg::LanguageC<BaseScalar>;
   using Node = typename LanguageC::Node;
   using Arg = typename LanguageC::Arg;
   using LanguageC::_auxArrayName;
@@ -22,21 +20,23 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
   using LanguageC::isOffsetBy;
   using LanguageC::isSameArgument;
 
-  bool assume_cuda_namegen{true};
+  bool assume_compact_namegen{true};
 
   // maps constants to their variable names
   std::unordered_map<std::string, std::string> constants_;
 
  public:
-  LanguageCuda(bool assume_cuda_namegen = true, size_t spaces = 2)
-      : CppAD::cg::LanguageC<Base>("Float", spaces),
-        assume_cuda_namegen(assume_cuda_namegen) {}
+  LanguageCompact(bool assume_compact_namegen = true, size_t spaces = 2)
+      : CppAD::cg::LanguageC<BaseScalar>("Float", spaces),
+        assume_compact_namegen(assume_compact_namegen) {}
 
-  std::unique_ptr<CppAD::cg::LanguageGenerationData<Base>> &getInfo() {
+  virtual ~LanguageCompact() = default;
+
+  std::unique_ptr<CppAD::cg::LanguageGenerationData<BaseScalar>> &getInfo() {
     return this->_info;
   }
-  const std::unique_ptr<CppAD::cg::LanguageGenerationData<Base>> &getInfo()
-      const {
+  const std::unique_ptr<CppAD::cg::LanguageGenerationData<BaseScalar>>
+      &getInfo() const {
     return this->_info;
   }
 
@@ -51,9 +51,9 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     CPPADCG_ASSERT_KNOWN(
         atomicFor.getInfo().size() == 3,
         "Invalid number of information elements for atomic forward operation")
-    int q = atomicFor.getInfo()[1];
-    int p = atomicFor.getInfo()[2];
-    int p1 = p + 1;
+    size_t q = atomicFor.getInfo()[1];
+    size_t p = atomicFor.getInfo()[2];
+    size_t p1 = p + 1;
     const std::vector<Arg> &opArgs = atomicFor.getArguments();
     // CPPADCG_ASSERT_KNOWN(
     //     opArgs.size() == p1 * 2,
@@ -117,8 +117,8 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
       //                   << ");\n";
 
       // find the index in "idx" array
-      // OperationNode<Base> &array = *ty[p];
-      OperationNode<Base> &array = *tx[1];
+      // OperationNode<BaseScalar> &array = *ty[p];
+      OperationNode<BaseScalar> &array = *tx[1];
       size_t nnz = array.getArguments().size();
       // size_t size = array.getInfo()[0];
       size_t id = this->getVariableID(array);
@@ -182,7 +182,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     CPPADCG_ASSERT_KNOWN(
         atomicRev.getInfo().size() == 2,
         "Invalid number of information elements for atomic reverse operation")
-    int p = atomicRev.getInfo()[1];
+    size_t p = atomicRev.getInfo()[1];
     size_t p1 = p + 1;
     const std::vector<Arg> &opArgs = atomicRev.getArguments();
     CPPADCG_ASSERT_KNOWN(
@@ -251,7 +251,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     //                    this->_info->atomicFunctionId2Name.at(id)
     //                    << "\n";
 
-    OperationNode<Base> &array = *py[0];
+    OperationNode<BaseScalar> &array = *py[0];
     size_t nnz = array.getArguments().size();
     // // size_t size = array.getInfo()[0];
     size_t arr_id = this->getVariableID(array);
@@ -270,7 +270,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     this->markArrayChanged(*px[0]);
   }
 
-  CppAD::cg::VariableNameGenerator<Base> *getNameGen() {
+  CppAD::cg::VariableNameGenerator<BaseScalar> *getNameGen() {
     return this->_nameGen;
   }
 
@@ -295,16 +295,16 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
       std::vector<const Arg *> &tmpArrayValues) override {
     using namespace CppAD::cg;
 
-    const std::vector<Argument<Base>> &args = array.getArguments();
+    const std::vector<Argument<BaseScalar>> &args = array.getArguments();
     const size_t argSize = args.size();
     size_t i = starti + 1;
 
     std::ostringstream arrayAssign;
 
-    const Argument<Base> &ref = args[starti];
+    const Argument<BaseScalar> &ref = args[starti];
     if (ref.getOperation() != nullptr) {
       //
-      const OperationNode<Base> &refOp = *ref.getOperation();
+      const OperationNode<BaseScalar> &refOp = *ref.getOperation();
       CGOpCode op = refOp.getOperationType();
       if (op == CGOpCode::Inv) {
         /**
@@ -338,9 +338,9 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
         else
           arrayAssign << indep << "[i + " << offset << "]";
 
-        if (assume_cuda_namegen) {
+        if (assume_compact_namegen) {
           auto *cudaNameGen =
-              static_cast<CudaVariableNameGenerator<Base> *>(this->_nameGen);
+              static_cast<CompactVariableNameGenerator *>(this->_nameGen);
 
           // account for difference between thread-local and global input
           long xj_offset = offset - (long)cudaNameGen->global_input_dim();
@@ -435,10 +435,10 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
           p2dip.reset(encapsulateIndexPattern(*refSecp, starti));
         }
 
-        std::unique_ptr<OperationNode<Base>> op2(
-            OperationNode<Base>::makeTemporaryNode(CGOpCode::LoopIndexedIndep,
-                                                   refOp.getInfo(),
-                                                   refOp.getArguments()));
+        std::unique_ptr<OperationNode<BaseScalar>> op2(
+            OperationNode<BaseScalar>::makeTemporaryNode(
+                CGOpCode::LoopIndexedIndep, refOp.getInfo(),
+                refOp.getArguments()));
         op2->getInfo()[1] =
             (std::numeric_limits<size_t>::max)();  // just to be safe (this
                                                    // would be the index pattern
@@ -459,7 +459,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
           else if (args[i].getOperation() == nullptr)
             break;
 
-          const OperationNode<Base> &opNode2 = *args[i].getOperation();
+          const OperationNode<BaseScalar> &opNode2 = *args[i].getOperation();
           if (getVariableID(opNode2) < this->_minTemporaryVarID) break;
 
           CGOpCode op2 = opNode2.getOperationType();
@@ -483,7 +483,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
             _nameGen->getTemporaryVarArrayName(refOp, getVariableID(refOp));
         size_t start =
             _nameGen->getTemporaryVarArrayIndex(refOp, getVariableID(refOp));
-        long offset = long(start) - starti;
+        long offset = long(start) - long(starti);
         if (offset == 0)
           arrayAssign << tmpName << "[i]";
         else
@@ -504,14 +504,14 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
       /**
        * constant value?
        */
-      const Base &value = *args[starti].getParameter();
+      const BaseScalar &value = *args[starti].getParameter();
       for (; i < argSize; i++) {
         if (args[i].getParameter() == nullptr ||
             *args[i].getParameter() != value) {
           break;  // not the same constant value
         }
 
-        const Argument<Base> *oldArg = tmpArrayValues[startPos + i];
+        const Argument<BaseScalar> *oldArg = tmpArrayValues[startPos + i];
         if (oldArg != nullptr && oldArg->getParameter() != nullptr &&
             *oldArg->getParameter() == value) {
           break;  // values are the same (no need to redefine)
@@ -547,7 +547,7 @@ class LanguageCuda : public CppAD::cg::LanguageC<Base> {
     return i;
   }
 
-  void pushParameter(const Base &value) override {
+  void pushParameter(const BaseScalar &value) override {
     std::ostringstream os;
     os << std::setprecision(this->_parameterPrecision) << value;
     std::string number = os.str();

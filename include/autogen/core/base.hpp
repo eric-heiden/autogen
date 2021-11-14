@@ -3,11 +3,36 @@
 #include <memory>
 #include <vector>
 
-#include "autogen/utils/system.hpp"
+// operating system detection
+#ifndef AUTOGEN_SYSTEM_LINUX
+#if defined(__linux__) || defined(__linux) || defined(linux)
+#define AUTOGEN_SYSTEM_LINUX 1
+#endif
+#endif
+#ifndef AUTOGEN_SYSTEM_APPLE
+#if defined(__APPLE__)
+#define AUTOGEN_SYSTEM_APPLE 1
+#define AUTOGEN_SYSTEM_LINUX 1
+#endif
+#endif
+#ifndef AUTOGEN_SYSTEM_WIN
+#if defined(_WIN32) || defined(_WIN64) || defined(__WIN32__) || \
+    defined(__TOS_WIN__) || defined(__WINDOWS__)
+#define AUTOGEN_SYSTEM_WIN 1
+#endif
+#endif
 
 namespace autogen {
 using BaseScalar = double;
 
+/**
+ * Method of how the output of a vectorized function is accumulated.
+ * This setting typically only applies to the vectorized version of the Jacobian pass of a function.
+ * 
+ * ACCUMULATE_NONE: No accumulation.
+ * ACCUMULATE_SUM: Sum of the output vectors.
+ * ACCUMULATE_MEAN: Mean of the output vectors.
+ */
 enum AccumulationMethod { ACCUMULATE_NONE, ACCUMULATE_SUM, ACCUMULATE_MEAN };
 
 struct GeneratedBase {

@@ -1,40 +1,17 @@
 #pragma once
 
+#include "autogen/core/base.hpp"
+
 namespace autogen {
-struct CudaFunctionMetaData {
+struct CompactFunctionMetaData {
   int output_dim;
   int local_input_dim;
   int global_input_dim;
-  bool accumulated_output;
+  int accumulated_output;
 };
 
-template <typename Scalar>
-using DefaultCudaFunctionPtrT = void (*)(int, int, int, Scalar *);
-template <typename Scalar>
-using SendLocalFunctionPtrT = bool (*)(int, const Scalar *);
-template <typename Scalar>
-using SendGlobalFunctionPtrT = bool (*)(const Scalar *);
-
-using MetaDataFunctionPtrT = CudaFunctionMetaData (*)();
-using AllocateFunctionPtrT = void (*)(int);
-using DeallocateFunctionPtrT = void (*)();
-
-template <typename Scalar,
-          typename kFunctionPtrT = DefaultCudaFunctionPtrT<Scalar>>
-struct CudaFunction {
-  template <typename OtherScalar>
-  friend class CudaLibrary;
-
-  using FunctionPtrT = kFunctionPtrT;
-  std::string function_name;
-
- protected:
-  CudaFunctionMetaData meta_data_{};
-  bool is_available_{false};
-
-  // remembers for how many threads the last allocation took place
-  mutable int last_allocation_threads_{0};
-
+struct AbstractLibFunction {
+  // loads the function pointer from a dynamic library handle
   template <typename FunctionPtrT>
   static FunctionPtrT load_function(const std::string &function_name,
                                     void *lib_handle) {
@@ -57,6 +34,48 @@ struct CudaFunction {
     return ptr;
   }
 
+  virtual ~AbstractLibFunction() = default;
+
+  virtual void allocate(int num_total_threads) const = 0;
+  virtual void deallocate() const = 0;
+};
+
+// type definitions for the function signatures
+template <typename ScalarT>
+struct LibFunctionTypes {
+  using Scalar = ScalarT;
+  // signature: (num_threads, output_vector)
+  using LaunchFunctionPtrT = void (*)(int, ScalarT *);
+  using SendLocalFunctionPtrT = bool (*)(int, const ScalarT *);
+  using SendGlobalFunctionPtrT = bool (*)(const ScalarT *);
+  using MetaDataFunctionPtrT = CompactFunctionMetaData (*)();
+  using AllocateFunctionPtrT = void (*)(int);
+  using DeallocateFunctionPtrT = void (*)();
+};
+
+template <typename FunctionTypes>
+class CompactLibFunctionT : public AbstractLibFunction {
+ public:
+  template <class LibFunction>
+  friend class CompactLibrary;
+
+  std::string function_name;
+
+  using Scalar = typename FunctionTypes::Scalar;
+  using LaunchFunctionPtrT = typename FunctionTypes::LaunchFunctionPtrT;
+  using SendLocalFunctionPtrT = typename FunctionTypes::SendLocalFunctionPtrT;
+  using SendGlobalFunctionPtrT = typename FunctionTypes::SendGlobalFunctionPtrT;
+  using MetaDataFunctionPtrT = typename FunctionTypes::MetaDataFunctionPtrT;
+  using AllocateFunctionPtrT = typename FunctionTypes::AllocateFunctionPtrT;
+  using DeallocateFunctionPtrT = typename FunctionTypes::DeallocateFunctionPtrT;
+
+ protected:
+  CompactFunctionMetaData meta_data_{};
+  bool is_available_{false};
+
+  // remembers for how many threads the last allocation took place
+  mutable int last_allocation_threads_{0};
+
  public:
   bool is_available() const { return is_available_; };
 
@@ -77,13 +96,23 @@ struct CudaFunction {
    */
   bool accumulated_output() const { return meta_data_.accumulated_output; }
 
-  CudaFunction() = default;
-  CudaFunction(const std::string &function_name, void *lib_handle)
-      : function_name(function_name) {
+  CompactLibFunctionT() = default;
+  virtual ~CompactLibFunctionT() {
+    if (!is_available_ && last_allocation_threads_ != 0) {
+      // function is not available but memory has been allocated
+      assert(false);
+    }
+    if (is_available_) {
+      deallocate();
+    }
+  }
+
+  virtual void load(const std::string &function_name, void *lib_handle) {
+    this->function_name = function_name;
     try {
-      fun_ = load_function<FunctionPtrT>(function_name, lib_handle);
+      fun_ = load_function<LaunchFunctionPtrT>(function_name, lib_handle);
       is_available_ = true;
-    } catch (const std::runtime_error &ex) {
+    } catch (const std::runtime_error &) {
       is_available_ = false;
     }
     if (is_available_) {
@@ -95,27 +124,26 @@ struct CudaFunction {
       deallocate_ = load_function<DeallocateFunctionPtrT>(
           function_name + "_deallocate", lib_handle);
       try {
-        send_global_fun_ = load_function<SendGlobalFunctionPtrT<Scalar>>(
+        send_global_fun_ = load_function<SendGlobalFunctionPtrT>(
             function_name + "_send_global", lib_handle);
       } catch (...) {
+        // we ignore the case when there is no global send function
       }
-      send_local_fun_ = load_function<SendLocalFunctionPtrT<Scalar>>(
+      send_local_fun_ = load_function<SendLocalFunctionPtrT>(
           function_name + "_send_local", lib_handle);
     }
   }
 
-  virtual ~CudaFunction() { deallocate(); }
-
-  inline void allocate(int num_total_threads) const {
+  virtual void allocate(int num_total_threads) const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
     if (last_allocation_threads_ == num_total_threads) {
       // already allocated
       return;
     } else if (last_allocation_threads_ > 0) {
-      std::cerr << "GPU memory for function \"" << function_name
+      std::cerr << "Memory for function \"" << function_name
                 << "\" has been previously allocated for "
                 << last_allocation_threads_
                 << " thread(s). Automatically deallocating memory first...\n";
@@ -125,9 +153,9 @@ struct CudaFunction {
     last_allocation_threads_ = num_total_threads;
   }
 
-  inline void deallocate() const {
+  virtual void deallocate() const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
     if (last_allocation_threads_ == 0) {
@@ -137,11 +165,10 @@ struct CudaFunction {
     last_allocation_threads_ = 0;
   }
 
-  inline bool operator()(int num_total_threads, int num_blocks,
-                         int num_threads_per_block, Scalar *output,
-                         const Scalar *input) const {
+  virtual bool operator()(int num_total_threads, Scalar *output,
+                          const Scalar *input) const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
     allocate(num_total_threads);
@@ -154,60 +181,30 @@ struct CudaFunction {
     if (!status) {
       return false;
     }
-    status = send_local_input(&(input[meta_data_.global_input_dim]));
+    status = send_local_input(num_total_threads,
+                              &(input[meta_data_.global_input_dim]));
     assert(status);
     if (!status) {
       return false;
     }
-    fun_(num_total_threads, num_blocks, num_threads_per_block, output);
-    return true;
+
+    return execute_(num_total_threads, output);
   }
 
-  inline bool operator()(const std::vector<Scalar> &input,
-                         std::vector<Scalar> &output) const {
+  virtual bool operator()(const std::vector<Scalar> &input,
+                          std::vector<Scalar> &output) const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
-    allocate(1);
-    assert(fun_);
-    bool status;
-    const Scalar *input_data = input.data();
-    if (send_global_fun_) {
-      status = send_global_input(input_data);
-      assert(status);
-      if (!status) {
-        return false;
-      }
-    }
-    status = send_local_input(1, &(input_data[meta_data_.global_input_dim]));
-    assert(status);
-    if (!status) {
-      return false;
-    }
-    output.resize(output_dim());
-    fun_(1, 1, 1, output.data());
-    return true;
+    return (*this)(1, &output[0], &input[0]);
   }
 
-  inline bool operator()(int num_total_threads, Scalar *output,
-                         int num_threads_per_block = 32) const {
+  virtual bool operator()(std::vector<std::vector<Scalar>> *thread_outputs,
+                          const std::vector<std::vector<Scalar>> &local_inputs,
+                          const std::vector<Scalar> &global_input = {}) const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
-                               "\" is not available.");
-    }
-    assert(fun_);
-    int num_blocks = num_total_threads / num_threads_per_block;
-    fun_(num_total_threads, num_blocks, num_threads_per_block, output);
-    return true;
-  }
-
-  inline bool operator()(std::vector<std::vector<Scalar>> *thread_outputs,
-                         const std::vector<std::vector<Scalar>> &local_inputs,
-                         int num_threads_per_block = 32,
-                         const std::vector<Scalar> &global_input = {}) const {
-    if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
 
@@ -229,13 +226,9 @@ struct CudaFunction {
     }
 
     int num_total_threads = static_cast<int>(local_inputs.size());
-    num_threads_per_block = std::min(num_threads_per_block, num_total_threads);
     Scalar *output = new Scalar[num_total_threads * meta_data_.output_dim];
 
-    int num_blocks = num_total_threads / num_threads_per_block;
-
-    // call GPU kernel
-    fun_(num_total_threads, num_blocks, num_threads_per_block, output);
+    status &= execute_(num_total_threads, output);
 
     // assign thread-wise outputs
     std::size_t i = 0;
@@ -257,22 +250,22 @@ struct CudaFunction {
     }
 
     delete[] output;
-    return true;
+    return status;
   }
 
-  inline bool send_local_input(int num_total_threads,
-                               const Scalar *input) const {
+  virtual bool send_local_input(int num_total_threads,
+                                const Scalar *input) const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
     assert(send_local_fun_);
     return send_local_fun_(num_total_threads, input);
   }
-  inline bool send_local_input(
+  virtual bool send_local_input(
       const std::vector<std::vector<Scalar>> &thread_inputs) const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
     assert(send_local_fun_);
@@ -290,13 +283,14 @@ struct CudaFunction {
         ++i;
       }
     }
-    bool status = send_local_fun_(num_total_threads, input);
+    bool status = send_local_input(num_total_threads, input);
     delete[] input;
     return status;
   }
-  inline bool send_local_input(const std::vector<Scalar> &thread_inputs) const {
+  virtual bool send_local_input(
+      const std::vector<Scalar> &thread_inputs) const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
     assert(send_local_fun_);
@@ -305,18 +299,18 @@ struct CudaFunction {
     return send_local_fun_(num_total_threads, thread_inputs.data());
   }
 
-  inline bool send_global_input(const Scalar *input) const {
+  virtual bool send_global_input(const Scalar *input) const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
     assert(send_global_fun_);
     return send_global_fun_(input);
   }
 
-  inline bool send_global_input(const std::vector<Scalar> &input) const {
+  virtual bool send_global_input(const std::vector<Scalar> &input) const {
     if (!is_available_) {
-      throw std::runtime_error("Function \"" + function_name +
+      throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
     assert(send_global_fun_);
@@ -324,14 +318,35 @@ struct CudaFunction {
       assert(false);
       return false;
     }
-    return send_global_fun_(input.data());
+    return send_global_input(input.data());
   }
 
  protected:
-  FunctionPtrT fun_{nullptr};
+  LaunchFunctionPtrT fun_{nullptr};
   AllocateFunctionPtrT allocate_{nullptr};
   DeallocateFunctionPtrT deallocate_{nullptr};
-  SendGlobalFunctionPtrT<Scalar> send_global_fun_{nullptr};
-  SendLocalFunctionPtrT<Scalar> send_local_fun_{nullptr};
+  SendGlobalFunctionPtrT send_global_fun_{nullptr};
+  SendLocalFunctionPtrT send_local_fun_{nullptr};
+
+  virtual bool execute_(int num_threads, Scalar *output) const {
+    if constexpr (std::is_same_v<
+                      LaunchFunctionPtrT,
+                      LibFunctionTypes<Scalar>::LaunchFunctionPtrT>) {
+      fun_(num_threads, output);
+    } else {
+      throw std::runtime_error(
+          "LibFunction::execute_(num_threads, output) needs to be implemented "
+          "since the type of the launch function pointer differs from the "
+          "default CompactLibFunction launch function pointer type.");
+      // static_assert(
+      //     false,
+      //     "LibFunction::execute_(num_threads, output) needs to be implemented
+      //     " "since the type of the launch function pointer differs from the "
+      //     "default CompactLibFunction launch function pointer type.");
+    }
+    return true;
+  }
 };
+
+typedef CompactLibFunctionT<LibFunctionTypes<BaseScalar>> CompactLibFunction;
 }  // namespace autogen

@@ -1,34 +1,35 @@
 #pragma once
 
+#include "autogen/core/types.hpp"
+
 namespace autogen {
-template <class Base>
-class CudaVariableNameGenerator
-    : public CppAD::cg::LangCDefaultVariableNameGenerator<Base> {
-protected:
+class CompactVariableNameGenerator
+    : public CppAD::cg::LangCDefaultVariableNameGenerator<BaseScalar> {
+ protected:
   // defines how many input indices belong to the global input
-  std::size_t global_input_dim_{0};
+  size_t global_input_dim_{0};
   // name of thread-local input
   std::string local_name_;
 
-public:
-  inline explicit CudaVariableNameGenerator(
-      std::size_t global_input_dim, std::string depName = "y",
+ public:
+  inline explicit CompactVariableNameGenerator(
+      size_t global_input_dim, std::string depName = "y",
       std::string indepName = "x", std::string localName = "xj",
       std::string tmpName = "v", std::string tmpArrayName = "array",
       std::string tmpSparseArrayName = "sarray")
-      : CppAD::cg::LangCDefaultVariableNameGenerator<Base>(
+      : CppAD::cg::LangCDefaultVariableNameGenerator<BaseScalar>(
             depName, indepName, tmpName, tmpArrayName, tmpSparseArrayName),
-        global_input_dim_(global_input_dim), local_name_(std::move(localName)) {
-  }
+        global_input_dim_(global_input_dim),
+        local_name_(std::move(localName)) {}
 
-  std::size_t global_input_dim() const { return global_input_dim_; }
+  size_t global_input_dim() const { return global_input_dim_; }
   const std::string &local_name() const { return local_name_; }
   const std::string &independent_name() const { return this->_indepName; }
   const std::string &dependent_name() const { return this->_depName; }
 
-  inline std::string
-  generateIndependent(const CppAD::cg::OperationNode<Base> &independent,
-                      size_t id) override {
+  inline std::string generateIndependent(
+      const CppAD::cg::OperationNode<BaseScalar> &independent,
+      size_t id) override {
     this->_ss.clear();
     this->_ss.str("");
 
@@ -44,4 +45,4 @@ public:
     return this->_ss.str();
   }
 };
-} // namespace autogen
+}  // namespace autogen

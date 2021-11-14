@@ -61,15 +61,22 @@ INTERFACE
 
 find_package(OpenMP)
 
-add_library(autogen INTERFACE)
-target_include_directories(autogen INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)
-target_link_libraries(autogen INTERFACE ${CMAKE_DL_LIBS} CppADCodeGen Threads::Threads)
+add_library(autogen "")
+target_sources(autogen
+  PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src/autogen.cpp
+  PUBLIC
+    ${CMAKE_CURRENT_LIST_DIR}/include/autogen/autogen.hpp
+)
+
+target_include_directories(autogen PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
+target_link_libraries(autogen PUBLIC ${CMAKE_DL_LIBS} CppADCodeGen Threads::Threads)
 if (OpenMP_CXX_FOUND)
-  target_link_libraries(autogen INTERFACE OpenMP::OpenMP_CXX)
+  target_link_libraries(autogen PUBLIC OpenMP::OpenMP_CXX)
 endif (OpenMP_CXX_FOUND)
 if (Eigen_FOUND)
-  target_link_libraries(autogen INTERFACE Eigen3::Eigen3)
-  target_compile_definitions(autogen INTERFACE USE_EIGEN=1)
+  target_link_libraries(autogen PUBLIC Eigen3::Eigen3)
+  target_compile_definitions(autogen PUBLIC USE_EIGEN=1)
 endif (Eigen_FOUND)
 
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/examples)

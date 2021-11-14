@@ -1,9 +1,7 @@
 #pragma once
 
-#include <cppad/cg.hpp>
-
 #include "base.hpp"
-
+#include "cppadcg_user.hpp"
 
 namespace autogen {
 using ADScalar = typename CppAD::AD<BaseScalar>;
@@ -52,3 +50,5 @@ static inline BaseScalar to_double(const ADCGScalar& x) {
   return CppAD::Value(CppAD::Var2Par(x)).getValue();
 }
 }  // namespace autogen
+
+#include "autogen/utils/conditionals.hpp"

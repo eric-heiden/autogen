@@ -1,35 +1,13 @@
-#pragma once
-
-// operating system detection
-#ifndef AUTOGEN_SYSTEM_LINUX
-#if defined(__linux__) || defined(__linux) || defined(linux)
-#define AUTOGEN_SYSTEM_LINUX 1
-#endif
-#endif
-#ifndef AUTOGEN_SYSTEM_APPLE
-#if defined(__APPLE__)
-#define AUTOGEN_SYSTEM_APPLE 1
-#define AUTOGEN_SYSTEM_LINUX 1
-#endif
-#endif
-#ifndef AUTOGEN_SYSTEM_WIN
-#if defined(_WIN32) || defined(_WIN64) || defined(__WIN32__) || \
-    defined(__TOS_WIN__) || defined(__WINDOWS__)
-#define AUTOGEN_SYSTEM_WIN 1
-#endif
-#endif
+#include "autogen/utils/system.h"
 
 #include <array>
-#include <cppad/cg.hpp>
 #include <fstream>
 
-#include "filesystem.hpp"
+#include "autogen/utils/filesystem.hpp"
 
 namespace autogen {
-static std::string exec(const std::string &cmd,
-                        const std::vector<std::string> &args,
-                        bool throw_exception_on_error = true,
-                        int *return_code = nullptr) {
+std::string exec(const std::string &cmd, const std::vector<std::string> &args,
+                 bool throw_exception_on_error, int *return_code) {
   std::string msg;
   int code = CppAD::cg::system::callExecutable(cmd, args, &msg, nullptr);
   if (return_code != nullptr) {
@@ -50,19 +28,7 @@ static std::string exec(const std::string &cmd,
   return msg;
 }
 
-static bool file_exists(const std::string &filename) {
-  namespace fs = std::filesystem;
-  return fs::exists(filename);
-}
-
-static bool directory_exists(const std::string &dirname) {
-  namespace fs = std::filesystem;
-  return fs::is_directory(dirname);
-}
-
-// returns the absolute path of the executable
-static std::string find_exe(const std::string &name,
-                            bool throw_exception_on_error = true) {
+std::string find_exe(const std::string &name, bool throw_exception_on_error) {
   try {
 #if AUTOGEN_SYSTEM_WIN
     std::string path =

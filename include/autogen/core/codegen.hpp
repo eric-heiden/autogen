@@ -1,14 +1,8 @@
 #pragma once
 
-#include <cppad/cg.hpp>
-#include <cppad/cg/arithmetic.hpp>
 #include <map>
-#ifdef USE_EIGEN
-#include <cppad/cg/support/cppadcg_eigen.hpp>
-#endif
 
-#include "base.hpp"
-#include "types.h"
+#include "cppadcg_system.h"
 
 // #define DEBUG 1
 
@@ -19,7 +13,6 @@ template <typename BaseScalar>
 using ADFunctor = typename std::function<void(
     const std::vector<ADCG<BaseScalar>> &, std::vector<ADCG<BaseScalar>> &)>;
 
-template <typename BaseScalar>
 struct FunctionTrace {
   using CGScalar = typename CppAD::cg::CG<BaseScalar>;
   using ADCGScalar = typename CppAD::AD<CGScalar>;
@@ -28,7 +21,7 @@ struct FunctionTrace {
 
   std::string name;
 
-  std::shared_ptr<ADFun> tape{nullptr};
+  ADFun* tape{nullptr};
   // TODO fix memory leak here (bridge cannot be destructed without triggering
   // atomic_index exception in debug mode)
   CGAtomicFunBridge *bridge{nullptr};
@@ -45,20 +38,22 @@ struct FunctionTrace {
     //  delete tape;
     //  // TODO atomic_base destructor in CppAD gets called twice and throws an
     //  // exception
+    // delete bridge;
 #ifdef NDEBUG
     // we don't trigger the CPPAD_ASSERT here
     // delete bridge;
 #endif
   }
+
+  bool has_tape() const { return tape != nullptr; }
 };
 
-template <typename BaseScalar = double>
 struct CodeGenData {
   /**
    * Maps each function that is executed to its trace.
    */
-  static inline std::map<std::string, FunctionTrace<BaseScalar>> *traces =
-      new std::map<std::string, FunctionTrace<BaseScalar>>;
+  static inline std::map<std::string, FunctionTrace> *traces =
+      new std::map<std::string, FunctionTrace>;
   /**
    * Keeps track of the order of atomic function invocations, i.e. functions
    * that are called later are added later to this list.
@@ -96,25 +91,25 @@ template <typename BaseScalar = double>
 inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
                         const std::vector<ADCG<BaseScalar>> &input,
                         std::vector<ADCG<BaseScalar>> &output) {
-  using ADFun = typename FunctionTrace<BaseScalar>::ADFun;
+  using ADFun = typename FunctionTrace::ADFun;
   using CGAtomicFunBridge =
-      typename FunctionTrace<BaseScalar>::CGAtomicFunBridge;
+      typename FunctionTrace::CGAtomicFunBridge;
 
-  auto &traces = CodeGenData<BaseScalar>::traces;
+  auto &traces = CodeGenData::traces;
 
 #if DEBUG
   std::cout << "Calling atomic function \"" << name << "\". is_dry_run? "
-            << std::boolalpha << CodeGenData<BaseScalar>::is_dry_run << "\n";
+            << std::boolalpha << CodeGenData::is_dry_run << "\n";
 #endif
 
   if (traces->find(name) == traces->end()) {
-    auto &order = *CodeGenData<BaseScalar>::invocation_order;
-    auto &stack = *CodeGenData<BaseScalar>::invocation_stack;
+    auto &order = *CodeGenData::invocation_order;
+    auto &stack = *CodeGenData::invocation_stack;
     if (!stack.empty()) {
       // the current function is called by another function, hence update the
       // call hierarchy
       const std::string &parent = stack.back();
-      auto &hierarchy = CodeGenData<BaseScalar>::call_hierarchy;
+      auto &hierarchy = CodeGenData::call_hierarchy;
       if (hierarchy.find(parent) == hierarchy.end()) {
         hierarchy[parent] = std::vector<std::string>();
       }
@@ -122,7 +117,7 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
     }
     order.push_back(name);
     stack.push_back(name);
-    FunctionTrace<BaseScalar> trace;
+    FunctionTrace trace;
     trace.name = name;
     trace.functor = functor;
     trace.trace_input.resize(input.size());
@@ -137,10 +132,10 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
     }
     // CppAD::Independent(trace.ax);
     // trace.functor(trace.ax, trace.ay);
-    // trace.tape = std::make_shared<ADFun>();
+    // trace.tape = new ADFun;
     // trace.tape->Dependent(trace.ax, trace.ay);
     // trace.tape->function_name_set(name);
-    // trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
+    // trace.bridge = create_atomic_fun_bridge(trace.name, *(trace.tape), true);
 
     (*traces)[name] = trace;
     // call this function (to discover more nested atomics)
@@ -150,18 +145,18 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
     std::cout << "\tNew function trace created.\n";
 #endif
     // std::cout << "Invocation order: ";
-    // for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
+    // for (const auto &s : *CodeGenData::invocation_order) {
     //   std::cout << s << " ";
     // }
     // std::cout << std::endl;
     stack.pop_back();  // remove current function from the stack
     return;
-  } else if (CodeGenData<BaseScalar>::is_dry_run) {
+  } else if (CodeGenData::is_dry_run) {
 #if DEBUG
     std::cout << "\tAlready traced during this dry run.\n";
 #endif
     // std::cout << "Invocation order: ";
-    // for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
+    // for (const auto &s : *CodeGenData::invocation_order) {
     //   std::cout << s << " ";
     // }
     // std::cout << std::endl;
@@ -173,30 +168,31 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
   std::cout << "\tCalling existing function trace.\n";
 #endif
 
-  FunctionTrace<BaseScalar> &trace = (*traces)[name];
+  FunctionTrace &trace = (*traces)[name];
   if (!trace.bridge) {
-    throw std::runtime_error("CGAtomicFunBridge for atomic function \"" + name +
-                             "\" is missing. Make sure to call `trace_existing_atomics()`.");
+    throw std::runtime_error(
+        "CGAtomicFunBridge for atomic function \"" + name +
+        "\" is missing. Make sure to call `trace_existing_atomics()`.");
   }
-  (*(trace.bridge))(input, output);
+  call_atomic_fun_bridge(trace.bridge, input, output);
+  // (*(trace.bridge))(input, output);
 
   // std::cout << "Invocation order: ";
-  // for (const auto &s : *CodeGenData<BaseScalar>::invocation_order) {
+  // for (const auto &s : *CodeGenData::invocation_order) {
   //   std::cout << s << " ";
   // }
   // std::cout << std::endl;
 }
 
-void trace_existing_atomics() {
+inline void trace_existing_atomics() {
   using CGScalar = typename CppAD::cg::CG<BaseScalar>;
   using ADCGScalar = typename CppAD::AD<CGScalar>;
   using ADFun = typename CppAD::ADFun<CGScalar>;
-  using CGAtomicFunBridge = typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
 
-  const auto &order = *CodeGenData<BaseScalar>::invocation_order;
+  const auto &order = *CodeGenData::invocation_order;
   // for (auto it = order.rbegin(); it != order.rend(); ++it) {
-  for (auto& [name, trace] : *CodeGenData<BaseScalar>::traces) {
-    // FunctionTrace<BaseScalar> &trace = (*CodeGenData<BaseScalar>::traces)[*it];
+  for (auto &[name, trace] : *CodeGenData::traces) {
+    // FunctionTrace &trace = (*CodeGenData::traces)[*it];
     if (trace.bridge) {
       continue;
     }
@@ -209,40 +205,39 @@ void trace_existing_atomics() {
     }
     CppAD::Independent(trace.ax);
     trace.functor(trace.ax, trace.ay);
-    trace.tape = std::make_shared<ADFun>();
+    trace.tape = new ADFun;
     trace.tape->Dependent(trace.ax, trace.ay);
     trace.tape->function_name_set(trace.name);
-    trace.bridge = new CGAtomicFunBridge(trace.name, *(trace.tape), true);
+    trace.bridge = create_atomic_fun_bridge(trace.name, *(trace.tape), true);
   }
 }
 
 template <typename Functor>
-static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
+inline FunctionTrace trace(Functor functor, const std::string &name,
                                        const std::vector<BaseScalar> &input,
                                        std::vector<BaseScalar> &output) {
   using CGScalar = typename CppAD::cg::CG<BaseScalar>;
   using ADCGScalar = typename CppAD::AD<CGScalar>;
   using ADFun = typename CppAD::ADFun<CGScalar>;
-  using CGAtomicFunBridge = typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
 
-  CodeGenData<BaseScalar>::clear();
+  CodeGenData::clear();
 
   // first, a "dry run" to discover the atomic functions
   {
-    CodeGenData<BaseScalar>::is_dry_run = true;
+    CodeGenData::is_dry_run = true;
     std::vector<ADCGScalar> ax(input.size()), ay(output.size());
     for (size_t i = 0; i < input.size(); ++i) {
       ax[i] = ADCGScalar(to_double(input[i]));
     }
     functor(ax, ay);
-    CodeGenData<BaseScalar>::is_dry_run = false;
+    CodeGenData::is_dry_run = false;
   }
 
   // next, trace the inner atomic functions
   trace_existing_atomics();
 
   // finally, trace the top-level function
-  FunctionTrace<BaseScalar> trace;
+  FunctionTrace trace;
   trace.name = name;
   std::vector<ADCGScalar> ax(input.size()), ay(output.size());
   std::cout << "Tracing function \"" << name << "\" for code generation...\n";
@@ -251,10 +246,10 @@ static FunctionTrace<BaseScalar> trace(Functor functor, const std::string &name,
   }
   CppAD::Independent(ax);
   functor(ax, ay);
-  trace.tape = std::make_shared<ADFun>();
+  trace.tape = new ADFun;
   trace.tape->Dependent(ax, ay);
   trace.tape->function_name_set(name);
-  trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
+  trace.bridge = create_atomic_fun_bridge(name, *(trace.tape), true);
   trace.input_dim = static_cast<int>(input.size());
   trace.output_dim = static_cast<int>(output.size());
   return trace;

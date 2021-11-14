@@ -1,8 +1,10 @@
 #pragma once
 
 #include "autogen/utils/file_utils.hpp"
+#include "autogen/utils/system.h"
+#include "compact_model.hpp"
 
-#if CPPAD_CG_SYSTEM_WIN
+#if AUTOGEN_SYSTEM_WIN
 #include <windows.h>
 
 namespace {
@@ -37,54 +39,55 @@ static std::string GetLastErrorAsString() {
 }  // namespace
 #endif
 
-#include "cuda_library_processor.hpp"
-#include "cuda_model.hpp"
-
 namespace autogen {
-template <typename Scalar>
-class CudaLibrary {
+template <class LibFunction = CompactLibFunction>
+class CompactLibrary {
  protected:
   using ModelInfoFunctionPtr = void (*)(char const *const **names, int *count);
 
   void *lib_handle_{nullptr};
 
-  std::map<std::string, CudaModel<Scalar>> models_;
+  std::map<std::string, std::unique_ptr<CompactModel<LibFunction>>> models_;
+
+#if !AUTOGEN_SYSTEM_WIN
+  int dl_open_mode_ = RTLD_NOW;
+#endif
+
+#if AUTOGEN_SYSTEM_WIN
+  std::string library_ext_{".dll"};
+#else
+  std::string library_ext_{".so"};
+#endif
 
  public:
   /**
    * Opens the dynamic library with the given basename (filename without
-   * extension), and loads the CUDA models.
+   * extension), and loads the models.
    */
-#if CPPAD_CG_SYSTEM_WIN
-  CudaLibrary(const std::string &library_basename, std::string path = "") {
-    path += library_basename + ".dll";
+  virtual void load(const std::string &library_basename,
+                    std::string path = "") {
+    path += library_basename + library_ext_;
     std::string abs_path;
     bool found = autogen::FileUtils::find_file(path, abs_path);
     assert(found);
+#if AUTOGEN_SYSTEM_WIN
     lib_handle_ = LoadLibrary(abs_path.c_str());
     if (lib_handle_ == nullptr) {
-      throw std::runtime_error("Failed to dynamically load CUDA library '" +
-                               library_basename + "' (error code " +
-                               std::to_string(GetLastError()) +
-                               "): " + GetLastErrorAsString());
+      throw std::runtime_error("Failed to dynamically load library '" +
+                               library_basename +
+                               "': " + GetLastErrorAsString());
     }
 #else
-  CudaLibrary(const std::string &library_basename, std::string path = "",
-              int dlOpenMode = RTLD_NOW) {
-    path += library_basename + ".so";
-    std::string abs_path;
-    bool found = autogen::FileUtils::find_file(path, abs_path);
-    assert(found);
     lib_handle_ = dlopen(abs_path.c_str(), dlOpenMode);
     // _dynLibHandle = dlmopen(LM_ID_NEWLM, path.c_str(), RTLD_NOW);
     if (lib_handle_ == nullptr) {
-      throw std::runtime_error("Failed to dynamically load CUDA library '" +
+      throw std::runtime_error("Failed to dynamically load library '" +
                                library_basename +
                                "': " + std::string(dlerror()));
     }
 #endif
     auto model_info_fun =
-        CudaFunction<Scalar>::template load_function<ModelInfoFunctionPtr>(
+        AbstractLibFunction::template load_function<ModelInfoFunctionPtr>(
             "model_info", lib_handle_);
     const char *const *names;
     int count;
@@ -95,17 +98,18 @@ class CudaLibrary {
     for (int i = 0; i < count; ++i) {
       std::cout << names[i];
       if (i < count - 1) std::cout << ", ";
-      models_.emplace(std::make_pair(std::string(names[i]),
-                                     CudaModel<Scalar>(names[i], lib_handle_)));
+      models_.emplace(std::make_pair(
+          std::string(names[i]),
+          std::make_unique<CompactModel<LibFunction>>(names[i], lib_handle_)));
     }
     std::cout << std::endl;
   }
 
-  virtual ~CudaLibrary() {
-    // clear models, which will deallocate GPU memory
+  void clear() {
+    // clear models, which will deallocate memory
     // before the library is unloaded
     models_.clear();
-#if CPPAD_CG_SYSTEM_WIN
+#if AUTOGEN_SYSTEM_WIN
     FreeLibrary((HMODULE)lib_handle_);
 #else
     dlclose(lib_handle_);
@@ -113,8 +117,11 @@ class CudaLibrary {
     lib_handle_ = nullptr;
   }
 
-  const CudaModel<Scalar> &get_model(const std::string &model_name) const {
-    return models_.at(model_name);
+  virtual ~CompactLibrary() { clear(); }
+
+  CompactModel<LibFunction>* get_model(
+      const std::string &model_name) const {
+    return models_.at(model_name).get();
   }
   bool has_model(const std::string &model_name) const {
     return models_.find(model_name) != models_.end();
@@ -127,5 +134,10 @@ class CudaLibrary {
     }
     return names;
   }
+
+#if !AUTOGEN_SYSTEM_WIN
+  int dl_open_mode() const { return dl_open_mode_; }
+  void set_dl_open_mode(int dl_open_mode) { dl_open_mode_ = dl_open_mode; }
+#endif
 };
 }  // namespace autogen
