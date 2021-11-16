@@ -74,7 +74,7 @@ struct Generated {
   int global_input_dim_{0};
   int output_dim_{0};
 
-  bool debug_mode_{true};
+  bool debug_mode_{false};
 
   GenerationMode mode_{MODE_CODEGEN};
   TargetType target_{TargetType::TARGET_LEGACY_C};
