@@ -15,7 +15,7 @@ PYBIND11_NUMPY_OBJECT_DTYPE(ADScalar);
 PYBIND11_NUMPY_OBJECT_DTYPE(ADCGScalar);
 
 struct Scope {
-  ScalarType mode{SCALAR_DOUBLE};
+  GenerationMode mode{MODE_NUMERICAL};
 };
 
 static Scope* global_scope_ = nullptr;
@@ -90,29 +90,28 @@ void retrieve_tape<ADScalar>() {
   // std::cout << "Retrieving ADScalar tape table...\n";
   ADScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<double>*>(
       py::get_shared_data("tape_table_ad"));
-  // CppAD::atomic_index_infos =
+  // CppAD::local::atomic_index_infos =
   //    std::shared_ptr<std::vector<CppAD::local::atomic_index_info>>(
   //    reinterpret_cast<std::vector<CppAD::local::atomic_index_info>*>(
   //         py::get_shared_data("atomic_index_infos_ad")));
-  // autogen::CodeGenData<autogen::BaseScalar>::traces = *reinterpret_cast<
+  // autogen::CodeGenData::traces = *reinterpret_cast<
   //     std::map<std::string, autogen::FunctionTrace<autogen::BaseScalar>>*>(
   //     py::get_shared_data("traces"));
-  // autogen::CodeGenData<autogen::BaseScalar>::is_dry_run =
+  // autogen::CodeGenData::is_dry_run =
   //     *reinterpret_cast<bool*>(py::get_shared_data("is_dry_run"));
-  // autogen::CodeGenData<autogen::BaseScalar>::call_hierarchy =
+  // autogen::CodeGenData::call_hierarchy =
   //     *reinterpret_cast<std::map<std::string, std::vector<std::string>>*>(
   //         py::get_shared_data("call_hierarchy"));
-  // autogen::CodeGenData<autogen::BaseScalar>::invocation_order =
+  // autogen::CodeGenData::invocation_order =
   //     reinterpret_cast<std::vector<std::string>*>(
   //         py::get_shared_data("invocation_order"));
   // std::cout << "AD restored Atomic index infos has "
-  //           << CppAD::atomic_index_infos->size() << " entries.\n";
+  //           << CppAD::local::atomic_index_infos->size() << " entries.\n";
 }
 
 void print_invocation_order() {
   std::cout << "Invocation order: ";
-  for (const auto& s :
-       *autogen::CodeGenData<autogen::BaseScalar>::invocation_order) {
+  for (const auto& s : *autogen::CodeGenData::invocation_order) {
     std::cout << s << " ";
   }
   std::cout << std::endl;
@@ -132,39 +131,37 @@ void retrieve_shared_ptr(T** target, const std::string& name) {
 template <>
 void retrieve_tape<ADCGScalar>() {
   // std::cout << "before retrieving tape ADCG restored Atomic index infos has "
-  //           << CppAD::atomic_index_infos->size() << " entries.\n";
+  //           << CppAD::local::atomic_index_infos->size() << " entries.\n";
   // std::cout << "Retrieving ADCGScalar tape table...\n";
   ADCGScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<CGScalar>*>(
       py::get_shared_data("tape_table_adcg"));
   ADCGScalar::tape_id_table =
       reinterpret_cast<CppAD::tape_id_t*>(py::get_shared_data("tape_id_table"));
-  retrieve_shared_ptr(&CppAD::atomic_index_infos, "atomic_index_infos");
-  // CppAD::atomic_index_infos =
+  retrieve_shared_ptr(&CppAD::local::atomic_index_infos, "atomic_index_infos");
+  // CppAD::local::atomic_index_infos =
   //     std::shared_ptr<std::vector<CppAD::local::atomic_index_info>>(reinterpret_cast<std::vector<CppAD::local::atomic_index_info>*>(
   //         py::get_shared_data("atomic_index_infos_adcg")));
-  // autogen::CodeGenData<autogen::BaseScalar>::traces = reinterpret_cast<
+  // autogen::CodeGenData::traces = reinterpret_cast<
   //     std::map<std::string, autogen::FunctionTrace<autogen::BaseScalar>>*>(
   //     py::get_shared_data("traces"));
-  retrieve_shared_ptr(&autogen::CodeGenData<autogen::BaseScalar>::traces,
-                      "traces");
-  autogen::CodeGenData<autogen::BaseScalar>::is_dry_run =
+  retrieve_shared_ptr(&autogen::CodeGenData::traces, "traces");
+  autogen::CodeGenData::is_dry_run =
       *reinterpret_cast<bool*>(py::get_shared_data("is_dry_run"));
-  // autogen::CodeGenData<autogen::BaseScalar>::call_hierarchy =
+  // autogen::CodeGenData::call_hierarchy =
   //     *reinterpret_cast<std::map<std::string, std::vector<std::string>>*>(
   //         py::get_shared_data("call_hierarchy"));
   // std::cout << "before retrieving tape data:  ";
   // print_invocation_order();
-  // autogen::CodeGenData<autogen::BaseScalar>::invocation_order =
+  // autogen::CodeGenData::invocation_order =
   //     reinterpret_cast<std::vector<std::string>*>(
   //         py::get_shared_data("invocation_order"));
-  retrieve_shared_ptr(
-      &autogen::CodeGenData<autogen::BaseScalar>::invocation_order,
-      "invocation_order");
+  retrieve_shared_ptr(&autogen::CodeGenData::invocation_order,
+                      "invocation_order");
 
   // std::cout << "after retrieved tape data:  ";
   // print_invocation_order();
   // std::cout << "ADCG restored Atomic index infos has "
-  //           << CppAD::atomic_index_infos->size() << " entries.\n";
+  //           << CppAD::local::atomic_index_infos->size() << " entries.\n";
 }
 
 template <>
@@ -308,19 +305,19 @@ void publish_class(py::module& m, const std::string& name) {
   auto handle_type =
       m.def(name.c_str(), [&m, &name](py::args args, const py::kwargs& kwargs) {
         switch (get_scope()->mode) {
-          case SCALAR_CPPAD: {
+          case MODE_CPPAD: {
             retrieve_tape<ADScalar>();
             // std::cout << "returning CppAD\n";
             py::type type = py::type::of<Class<ADScalar>>();
             return type(*args, **kwargs);
           }
-          case SCALAR_CODEGEN: {
+          case MODE_CODEGEN: {
             retrieve_tape<ADCGScalar>();
             // std::cout << "returning CodeGen\n";
             py::type type = py::type::of<Class<ADCGScalar>>();
             return type(*args, **kwargs);
           }
-          case SCALAR_DOUBLE:
+          case MODE_NUMERICAL:
           default: {
             // std::cout << "returning double\n";
             py::type type = py::type::of<Class<double>>();

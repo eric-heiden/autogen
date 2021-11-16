@@ -1,9 +1,11 @@
 #include "autogen/cg/target/openmp_target.h"
 
+#include "autogen/cg/compiler/clang_compiler.hpp"
+
 namespace autogen {
 void OpenMpCodeGen::emit_kernel_launch(std::ostringstream &code,
                                        const std::string &function_name,
-                                       size_t local_input_dim,
+                                       size_t local_input_dim, 
                                        size_t global_input_dim,
                                        size_t output_dim) const {
   std::string fun_head_start = "MODULE_API void " + function_name + "(";
@@ -14,8 +16,12 @@ void OpenMpCodeGen::emit_kernel_launch(std::ostringstream &code,
 
   code << "  const size_t output_dim = num_total_threads * " << output_dim
        << ";\n";
-
   std::string kernel_name = function_name + "_kernel";
+
+  if (debug_mode_) {
+    code << "  printf(\"Launching kernel \\\"" << kernel_name
+         << "\\\" with %i thread(s).\\n\", num_total_threads);\n";
+  }
 
   fun_head_start = "    " + kernel_name + "(";
   fun_arg_pad = std::string(fun_head_start.size(), ' ');
@@ -35,6 +41,9 @@ void OpenMpCodeGen::emit_kernel_launch(std::ostringstream &code,
 
   if (jac_acc_method_ != ACCUMULATE_NONE) {
     code << "\n  // accumulate thread-wise outputs\n";
+    if (debug_mode_) {
+      code << "  printf(\"Accumulating outputs...\\n\");\n";
+    }
     code << "  for (int i = 1; i < num_total_threads; ++i) {\n";
     code << "    for (int j = 0; j < " << output_dim << "; ++j) {\n";
     code << "      " << outvar << "[j] += " << outvar << "[i*" << output_dim
@@ -45,14 +54,36 @@ void OpenMpCodeGen::emit_kernel_launch(std::ostringstream &code,
   if (jac_acc_method_ == ACCUMULATE_MEAN) {
     code << "  for (int j = 0; j < " << output_dim << "; ++j) {\n";
     code << "    output[j] = " << outvar << "[j] / num_total_threads;\n";
-    code << "  }";
+    code << "  }\n";
   } else {
-    code << "  for (int j = 0; j < " << output_dim << "; ++j) {\n";
-    code << "    output[j] = " << outvar << "[j];\n";
-    code << "  }";
+    code << "  for (int i = 0; i < num_total_threads; ++i) {\n";
+    code << "    for (int j = 0; j < " << output_dim << "; ++j) {\n";
+    code << "      output[j] = " << outvar << "[i * " << output_dim
+         << " + j];\n";
+    code << "    }\n";
+    code << "  }\n";
   }
 
-  code << "\n}\n";
+  if (debug_mode_) {
+    code << "  printf(\"Output from kernel \\\"" << kernel_name
+         << "\\\":\\n\");\n";
+    if (jac_acc_method_ != ACCUMULATE_NONE) {
+      code << "  for (int j = 0; j < " << output_dim << "; ++j) {\n";
+      code << "    printf(\"%f  \", " << outvar << "[j]);\n";
+      code << "  }\n";
+    } else {
+      code << "  for (int i = 0; i < num_total_threads; ++i) {\n";
+      code << "    for (int j = 0; j < " << output_dim << "; ++j) {\n";
+      code << "      printf(\"%f  \", " << outvar << "[i * " << output_dim
+           << " + j];\n";
+      code << "    }\n";
+      code << "    printf(\"\\n\");\n";
+      code << "  }\n";
+    }
+    code << "  printf(\"\\n\");\n";
+  }
+
+  code << "}\n";
   code << "}\n";
 }
 
@@ -63,9 +94,9 @@ void OpenMpCodeGen::emit_allocation_functions(std::ostringstream &code,
                                               size_t output_dim) const {
   // global device memory pointers
   code << "Float* dev_" << function_name << "_output = NULL;\n";
-  code << "const Float* dev_" << function_name << "_local_input = NULL;\n";
+  code << "Float* dev_" << function_name << "_local_input = NULL;\n";
   if (global_input_dim > 0) {
-    code << "const Float* dev_" << function_name << "_global_input = NULL;\n\n";
+    code << "Float* dev_" << function_name << "_global_input = NULL;\n\n";
   }
 
   // allocation function
@@ -73,13 +104,24 @@ void OpenMpCodeGen::emit_allocation_functions(std::ostringstream &code,
        << "_allocate(int num_total_threads) {\n";
   code << "  allocate(&dev_" << function_name << "_output, " << output_dim
        << " * num_total_threads);\n";
-  code << "  // do not allocate the inputs because we directly assign them to "
-          "the input memory pointers in the send function(s)\n";
+  // code << "  // do not allocate the inputs because we directly assign them to
+  // "
+  //         "the input memory pointers in the send function(s)\n";
+  code << "  allocate(&dev_" << function_name << "_local_input, "
+       << local_input_dim << " * num_total_threads);\n";
+  if (global_input_dim > 0) {
+    code << "  allocate(&dev_" << function_name << "_global_input, "
+         << global_input_dim << ");\n";
+  }
   code << "}\n\n";
 
   // deallocation function
   code << "MODULE_API void " << function_name << "_deallocate() {\n";
-  code << "  // do nothing\n";
+  code << "  free(dev_" << function_name << "_output);\n";
+  code << "  free(dev_" << function_name << "_local_input);\n";
+  if (global_input_dim > 0) {
+    code << "  free(dev_" << function_name << "_global_input);\n";
+  }
   code << "}\n\n";
 }
 
@@ -88,22 +130,26 @@ void OpenMpCodeGen::emit_send_functions(std::ostringstream &code,
                                         size_t local_input_dim,
                                         size_t global_input_dim,
                                         size_t output_dim) const {
-  // send thread-local inputs to GPU
   std::string fun_head_start =
       "MODULE_API bool " + function_name + "_send_local(";
   std::string fun_arg_pad = std::string(fun_head_start.size(), ' ');
   code << fun_head_start;
   code << "int num_total_threads,\n";
   code << fun_arg_pad << "const Float *input) {\n";
-  code << "  dev_" << function_name << "_local_input = input;\n";
+  // code << "  dev_" << function_name << "_local_input = input;\n";
+  code << "  memcpy(dev_" << function_name
+       << "_local_input, input, sizeof(Float) * num_total_threads * "
+       << local_input_dim << ");\n";
   code << "  return true;\n";
   code << "}\n\n";
 
   if (global_input_dim > 0) {
-    // send global input to GPU
     code << "MODULE_API bool " + function_name + "_send_global(";
     code << "const Float *input) {\n";
-    code << "  dev_" << function_name << "_global_input = input;\n";
+    // code << "  dev_" << function_name << "_global_input = input;\n";
+    code << "  memcpy(dev_" << function_name
+         << "_global_input, input, sizeof(Float) * " << global_input_dim
+         << ");\n";
     code << "  return true;\n";
     code << "}\n\n";
   }
@@ -129,15 +175,18 @@ void OpenMpTarget::set_compiler_clang(
     std::string compiler_path, const std::vector<std::string> &compile_flags,
     const std::vector<std::string> &compile_lib_flags) {
   if (compiler_path.empty()) {
-    compiler_path = autogen::find_exe("clang");
+    compiler_path = autogen::find_exe("clang++");
   }
   compiler_ = std::make_shared<ClangCompiler>(compiler_path);
-  compiler_->addCompileFlag("-fopenmp");
-  // TODO verify
-  compiler_->addCompileFlag("-fopenmp=libomp");
+  compiler_->addCompileFlag("-std=c++11");
+  compiler_->addCompileFlag("-O0");
+  // compiler_->addCompileFlag("-fopenmp");
+  // compiler_->addCompileFlag("-fopenmp=libomp");
   for (const auto &flag : compile_flags) {
     compiler_->addCompileFlag(flag);
   }
+  compiler_->addCompileLibFlag("-std=c++11");
+  compiler_->addCompileFlag("-O0");
   for (const auto &flag : compile_lib_flags) {
     compiler_->addCompileLibFlag(flag);
   }
@@ -147,10 +196,11 @@ void OpenMpTarget::set_compiler_gcc(
     std::string compiler_path, const std::vector<std::string> &compile_flags,
     const std::vector<std::string> &compile_lib_flags) {
   if (compiler_path.empty()) {
-    compiler_path = autogen::find_exe("gcc");
+    compiler_path = autogen::find_exe("g++");
   }
   compiler_ = std::make_shared<GccCompiler>(compiler_path);
   compiler_->addCompileFlag("-fopenmp");
+  compiler_->addCompileFlag("-lstdc++");
   for (const auto &flag : compile_flags) {
     compiler_->addCompileFlag(flag);
   }
@@ -193,12 +243,24 @@ bool OpenMpTarget::compile_() {
   compiler_->setSourcesFolder(sources_folder_);
   compiler_->setTemporaryFolder(temp_folder_);
   compiler_->setSaveToDiskFirst(true);
+
+// TODO check type of compiler here, not operating system
+#if AUTOGEN_SYSTEM_WIN
   if (debug_mode_) {
-    compiler_->addCompileFlag("-g");
+    compiler_->addCompileFlag("/DEBUG:FULL");
+    compiler_->addCompileLibFlag("/DEBUG:FULL");
+    compiler_->addCompileFlag("/Od");
+  } else {
+    compiler_->addCompileFlag("/O" + std::to_string(optimization_level_));
+  }
+#else
+  if (debug_mode_) {
     compiler_->addCompileFlag("-O0");
+    compiler_->addCompileFlag("-g");
   } else {
     compiler_->addCompileFlag("-O" + std::to_string(optimization_level_));
   }
+#endif
 
   CppAD::cg::JobTimer *timer = new CppAD::cg::JobTimer();
 

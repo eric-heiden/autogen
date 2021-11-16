@@ -14,8 +14,9 @@ class OpenMpCodeGen : public CompactCodeGen {
   using CompactCodeGen::output_dim;
 
  public:
-  OpenMpCodeGen(const std::string &model_name, bool function_only = false)
-      : CompactCodeGen(model_name, function_only) {}
+  OpenMpCodeGen(const std::string &model_name, bool function_only = false,
+                bool debug_mode = false)
+      : CompactCodeGen(model_name, function_only, debug_mode) {}
 
   /**
    * Whether the kernel function should take the thread ID as an argument,
@@ -44,11 +45,10 @@ class OpenMpCodeGen : public CompactCodeGen {
 };
 
 struct OpenMpTarget : public CompactTarget<OpenMpCodeGen> {
-  using typename CompactTargetT = CompactTarget<OpenMpCodeGen>;
+  using CompactTargetT = CompactTarget<OpenMpCodeGen>;
 
   using AbstractCCompiler = typename CppAD::cg::AbstractCCompiler<BaseScalar>;
   using MsvcCompiler = typename CppAD::cg::MsvcCompiler<BaseScalar>;
-  using ClangCompiler = typename CppAD::cg::ClangCompiler<BaseScalar>;
   using GccCompiler = typename CppAD::cg::GccCompiler<BaseScalar>;
 
  protected:
@@ -57,7 +57,7 @@ struct OpenMpTarget : public CompactTarget<OpenMpCodeGen> {
   mutable std::shared_ptr<AbstractCCompiler> compiler_{nullptr};
 
  public:
-  OpenMpTarget(std::shared_ptr<GeneratedCodeGen> cg)
+  OpenMpTarget(GeneratedCodeGen *cg)
       : CompactTargetT(cg, TargetType::TARGET_OPENMP) {}
 
  protected:

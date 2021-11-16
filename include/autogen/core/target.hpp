@@ -16,7 +16,8 @@ namespace autogen {
 
 class Target {
  protected:
-  std::shared_ptr<GeneratedCodeGen> cg_{nullptr};
+  // this GeneratedCodeGen instance is owned by Generated, not the Target
+  GeneratedCodeGen *cg_{nullptr};
   TargetType type_;
 
   std::string source_folder_prefix_{".autogen/"};
@@ -56,8 +57,7 @@ class Target {
    */
   bool generate_jacobian_{true};
 
-  Target(std::shared_ptr<GeneratedCodeGen> cg, TargetType type)
-      : cg_(cg), type_(type) {
+  Target(GeneratedCodeGen *cg, TargetType type) : cg_(cg), type_(type) {
     if (cg_ == nullptr) {
       throw std::runtime_error(
           "Target cannot be created from an empty pointer to GeneratedCodeGen");
@@ -83,7 +83,9 @@ class Target {
   virtual bool generate_code_() = 0;
 
   virtual bool compile_() {
-    throw std::runtime_error("compile not implemented for this target");
+    throw std::runtime_error(
+        "function \"compile\" has not implemented for target " +
+        std::to_string(type_) + ".");
   }
 
  public:
@@ -134,33 +136,45 @@ class Target {
   }
 
   virtual bool load_library(const std::string &filename) {
-    throw std::runtime_error("load_library not implemented for this target");
+    throw std::runtime_error(
+        "function \"load_library\" has not implemented for target " +
+        std::to_string(type_) + ".");
   }
   virtual bool discard_library() {
-    throw std::runtime_error("discard_library not implemented for this target");
+    throw std::runtime_error(
+        "function \"discard_library\" has not implemented for target " +
+        std::to_string(type_) + ".");
   }
 
   virtual void forward(const std::vector<BaseScalar> &input,
                        std::vector<BaseScalar> &output) {
-    throw std::runtime_error("forward not implemented for this target");
+    throw std::runtime_error(
+        "function \"forward\" has not implemented for target " +
+        std::to_string(type_) + ".");
   }
 
   virtual void forward(const std::vector<std::vector<BaseScalar>> &local_inputs,
                        std::vector<std::vector<BaseScalar>> &outputs,
                        const std::vector<BaseScalar> &global_input) {
-    throw std::runtime_error("forward not implemented for this target");
+    throw std::runtime_error(
+        "function \"forward\" has not implemented for target " +
+        std::to_string(type_) + ".");
   }
 
   virtual void jacobian(const std::vector<BaseScalar> &input,
                         std::vector<BaseScalar> &output) {
-    throw std::runtime_error("jacobian not implemented for this target");
+    throw std::runtime_error(
+        "function \"jacobian\" has not implemented for target " +
+        std::to_string(type_) + ".");
   }
 
   virtual void jacobian(
       const std::vector<std::vector<BaseScalar>> &local_inputs,
       std::vector<std::vector<BaseScalar>> &outputs,
       const std::vector<BaseScalar> &global_input) {
-    throw std::runtime_error("jacobian not implemented for this target");
+    throw std::runtime_error(
+        "function \"jacobian\" has not implemented for target " +
+        std::to_string(type_) + ".");
   }
 
   virtual bool create_cmake_project(
@@ -168,8 +182,8 @@ class Target {
       const std::vector<std::vector<BaseScalar>> &local_inputs,
       const std::vector<BaseScalar> &global_input) const {
     throw std::runtime_error(
-        "create_cmake_project not implemented for this "
-        "target");
+        "function \"create_cmake_project\" has not implemented for target" +
+        std::to_string(type_) + ".");
   }
 
   virtual bool create_cmake_project(
@@ -184,6 +198,15 @@ class Target {
                                     const std::vector<BaseScalar> &input) {
     std::vector<std::vector<BaseScalar>> inputs{input};
     return create_cmake_project(destination_folder, inputs);
+  }
+
+  bool create_cmake_project(
+      const std::vector<BaseScalar> &input,
+      const std::vector<BaseScalar> &global_input = std::vector<BaseScalar>{}) {
+    std::vector<std::vector<BaseScalar>> inputs{input};
+    std::ostringstream folder_name;
+    folder_name << name() << "_" << std::to_string(type_) << "_cmake";
+    return create_cmake_project(folder_name.str(), inputs, global_input);
   }
 };
 }  // namespace autogen

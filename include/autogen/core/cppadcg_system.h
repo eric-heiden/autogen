@@ -64,4 +64,6 @@ CppAD::cg::CGAtomicFunBridge<BaseScalar>* create_atomic_fun_bridge(
 void call_atomic_fun_bridge(CppAD::cg::CGAtomicFunBridge<BaseScalar>* bridge,
                             const std::vector<ADCGScalar>& input,
                             std::vector<ADCGScalar>& output);
+
+void print_bridge(CppAD::cg::CGAtomicFunBridge<BaseScalar>* bridge);
 }  // namespace autogen

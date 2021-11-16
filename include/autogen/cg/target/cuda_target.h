@@ -52,8 +52,9 @@ class CudaCodeGen : public CompactCodeGen {
   using CompactCodeGen::output_dim;
 
  public:
-  CudaCodeGen(const std::string &model_name, bool function_only = false)
-      : CompactCodeGen(model_name, function_only) {
+  CudaCodeGen(const std::string &model_name, bool function_only = false,
+              bool debug_mode = false)
+      : CompactCodeGen(model_name, function_only, debug_mode) {
     this->kernel_requires_id_argument_ = false;
   }
 
@@ -100,7 +101,7 @@ class CudaCodeGen : public CompactCodeGen {
 };
 
 struct CudaTarget : public CompactTarget<CudaCodeGen, CudaLibFunction> {
-  using typename CompactTargetT = CompactTarget<CudaCodeGen, CudaLibFunction>;
+  using CompactTargetT = CompactTarget<CudaCodeGen, CudaLibFunction>;
 
  protected:
   mutable std::shared_ptr<CompactLibrary<CudaLibFunctionTypes>> cuda_library_{
@@ -114,7 +115,7 @@ struct CudaTarget : public CompactTarget<CudaCodeGen, CudaLibFunction> {
   using Target::optimization_level_;
 
  public:
-  CudaTarget(std::shared_ptr<GeneratedCodeGen> cg)
+  CudaTarget(GeneratedCodeGen *cg)
       : CompactTargetT(cg, TargetType::TARGET_CUDA) {}
 
   void set_compiler_nvcc(std::string compiler_path = "");

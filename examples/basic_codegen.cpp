@@ -95,24 +95,22 @@ int main(int argc, char *argv[]) {
   // } catch (const std::exception &ex) {
   //   std::cerr << "Error: " << ex.what() << std::endl;
   // }
-  // gen.target()->create_cmake_project(
-  //     "simple_a_" + std::to_string(gen.codegen_target()) + "_cmake", input);
+  // gen.target()->create_cmake_project(input);
 
-  try {
-    gen.set_codegen_target(autogen::TARGET_CUDA);
-    std::cout << "### Mode: " << gen.mode()
-              << "  Target: " << gen.codegen_target() << std::endl;
-    gen(input, output);
-    print(output);
-    gen.jacobian(input, jacobian);
-    print(jacobian);
-  } catch (const std::exception &ex) {
-    std::cerr << "Error: " << ex.what() << std::endl;
-  }
-  gen.target()->create_cmake_project(
-      "simple_a_" + std::to_string(gen.codegen_target()) + "_cmake", input);
+  // try {
+  //   gen.set_codegen_target(autogen::TARGET_CUDA);
+  //   std::cout << "### Mode: " << gen.mode()
+  //             << "  Target: " << gen.codegen_target() << std::endl;
+  //   gen(input, output);
+  //   print(output);
+  //   gen.jacobian(input, jacobian);
+  //   print(jacobian);
+  // } catch (const std::exception &ex) {
+  //   std::cerr << "Error: " << ex.what() << std::endl;
+  // }
+  // gen.target()->create_cmake_project(input);
 
-  try {
+  // try {
     gen.set_codegen_target(autogen::TARGET_LEGACY_C);
     std::cout << "### Mode: " << gen.mode()
               << "  Target: " << gen.codegen_target() << std::endl;
@@ -120,18 +118,11 @@ int main(int argc, char *argv[]) {
     print(output);
     gen.jacobian(input, jacobian);
     print(jacobian);
-  } catch (const std::exception &ex) {
-    std::cerr << "Error: " << ex.what() << std::endl;
-  }
-  gen.target()->create_cmake_project(
-      "simple_a_" + std::to_string(gen.codegen_target()) + "_cmake", input);
-
-  // gen.set_mode(autogen::GENERATE_CPU);
-  // std::cout << "### Mode: " << gen.mode() << std::endl;
-  // gen(input, output);
-  // print(output);
-  // gen.jacobian(input, jacobian);
-  // print(jacobian);
+  // } catch (const std::exception &ex) {
+  //   std::cerr << "Error: " << ex.what() << std::endl;
+  //   throw;
+  // }
+  gen.target()->create_cmake_project(input);
 
   return EXIT_SUCCESS;
 }

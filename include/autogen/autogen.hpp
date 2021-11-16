@@ -13,7 +13,6 @@
 // clang-format on
 
 namespace autogen {
-enum GenerationMode { MODE_NUMERICAL, MODE_CPPAD, MODE_CODEGEN };
 
 static inline std::string str(const GenerationMode& mode) {
   switch (mode) {
@@ -75,7 +74,7 @@ struct Generated {
   int global_input_dim_{0};
   int output_dim_{0};
 
-  bool debug_mode_{false};
+  bool debug_mode_{true};
 
   GenerationMode mode_{MODE_CODEGEN};
   TargetType target_{TargetType::TARGET_LEGACY_C};
@@ -121,9 +120,9 @@ struct Generated {
       gen_cg_->discard_library();
     }
   }
-  void load_precompiled_library(const std::string& path) {
+  void load_library(TargetType type, const std::string& path) {
     if (gen_cg_) {
-      gen_cg_->load_precompiled_library(path);
+      gen_cg_->load_library(type, path);
     }
   }
 

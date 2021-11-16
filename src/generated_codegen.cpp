@@ -10,16 +10,13 @@ TargetType GeneratedCodeGen::target_type() const { return target_->type(); }
 void GeneratedCodeGen::set_target(TargetType type) {
   switch (type) {
     case TARGET_LEGACY_C:
-      target_ = std::make_shared<LegacyCTarget>(
-          std::shared_ptr<GeneratedCodeGen>(this));
+      target_ = std::make_shared<LegacyCTarget>(this);
       break;
     case TARGET_CUDA:
-      target_ =
-          std::make_shared<CudaTarget>(std::shared_ptr<GeneratedCodeGen>(this));
+      target_ = std::make_shared<CudaTarget>(this);
       break;
     case TARGET_OPENMP:
-      target_ =
-          std::make_shared<OpenMpTarget>(std::shared_ptr<GeneratedCodeGen>(this));
+      target_ = std::make_shared<OpenMpTarget>(this);
       break;
     default:
       throw std::runtime_error("Unsupported target type");

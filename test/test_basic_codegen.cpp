@@ -67,7 +67,7 @@ TEST(AutogenTests, FiniteDifferencing) {
   std::vector<double> jacobian;
   std::vector<double> output(output_dim);
 
-  gen.set_mode(autogen::GENERATE_NONE);
+  gen.set_mode(autogen::MODE_NUMERICAL);
   gen(input, output);
   check_output(output);
   gen.jacobian(input, jacobian);
@@ -79,19 +79,19 @@ TEST(AutogenTests, CppAD) {
   std::vector<double> jacobian;
   std::vector<double> output(output_dim);
 
-  gen.set_mode(autogen::GENERATE_CPPAD);
+  gen.set_mode(autogen::MODE_CPPAD);
   gen(input, output);
   check_output(output);
   gen.jacobian(input, jacobian);
   check_jacobian(jacobian);
 }
 
-TEST(AutogenTests, CodeGenCPU) {
+TEST(AutogenTests, CodeGenOpenMP) {
   autogen::Generated<simple_a> gen("simple_a");
   std::vector<double> jacobian;
   std::vector<double> output(output_dim);
 
-  gen.set_mode(autogen::GENERATE_CPU);
+  gen.set_codegen_target(autogen::TARGET_OPENMP);
   gen(input, output);
   check_output(output);
   gen.jacobian(input, jacobian);

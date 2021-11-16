@@ -173,7 +173,7 @@ class CompactLibFunctionT : public AbstractLibFunction {
     }
     allocate(num_total_threads);
     assert(fun_);
-    bool status;
+    bool status = true;
     if (send_global_fun_) {
       status = send_global_input(input);
       assert(status);
@@ -197,7 +197,7 @@ class CompactLibFunctionT : public AbstractLibFunction {
       throw std::runtime_error("Library function \"" + function_name +
                                "\" is not available.");
     }
-    return (*this)(1, &output[0], &input[0]);
+    return (*this)(1, (Scalar*) &output[0], (const Scalar*) &input[0]);
   }
 
   virtual bool operator()(std::vector<std::vector<Scalar>> *thread_outputs,
@@ -211,7 +211,7 @@ class CompactLibFunctionT : public AbstractLibFunction {
     allocate(static_cast<int>(local_inputs.size()));
 
     assert(fun_);
-    bool status;
+    bool status = true;
     status = send_local_input(local_inputs);
     assert(status);
     if (!status) {
@@ -331,7 +331,7 @@ class CompactLibFunctionT : public AbstractLibFunction {
   virtual bool execute_(int num_threads, Scalar *output) const {
     if constexpr (std::is_same_v<
                       LaunchFunctionPtrT,
-                      LibFunctionTypes<Scalar>::LaunchFunctionPtrT>) {
+                      typename LibFunctionTypes<Scalar>::LaunchFunctionPtrT>) {
       fun_(num_threads, output);
     } else {
       throw std::runtime_error(

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "autogen/cg/compact/compact_codegen.h"
 #include "autogen/cg/compact/compact_library.hpp"
 #include "autogen/cg/compact/compact_model.hpp"
 #include "autogen/core/target.hpp"
@@ -13,34 +14,30 @@ namespace autogen {
 template <class CodeGenT = CompactCodeGen,
           class LibFunctionT = CompactLibFunction>
 struct CompactTarget : public Target {
-  using LibFunction = typename LibFunctionT;
-  using CodeGen = typename CodeGenT;
+  using LibFunction = LibFunctionT;
+  using CodeGen = CodeGenT;
 
  protected:
   using Target::cg_;
+  using Target::debug_mode_;
   using Target::sources_;
   using Target::sources_folder_;
   using Target::type_;
 
-  std::shared_ptr<CodeGen> codegen_{nullptr};
+  std::unique_ptr<CodeGen> codegen_{nullptr};
   std::unique_ptr<CompactLibrary<LibFunction>> library_{nullptr};
 
   // weak pointer to the model of interest in the library
   CompactModel<LibFunction> *model_{nullptr};
 
-  /**
-   * Whether to compile the CUDA library with debug symbols.
-   */
-  bool debug_mode_{false};
-
-  CompactTarget(std::shared_ptr<GeneratedCodeGen> cg, TargetType type)
-      : Target(cg, type) {
+  CompactTarget(GeneratedCodeGen *cg, TargetType type) : Target(cg, type) {
     if (!main_trace().has_tape()) {
       throw std::runtime_error(
           "CompactTarget cannot be created until GeneratedCodeGen has traced "
           "the function.");
     }
-    codegen_ = std::make_shared<CodeGen>(name());
+    bool is_function_only = false;
+    codegen_ = std::make_unique<CodeGen>(name(), is_function_only);
     codegen_->set_tape(*main_trace().tape);
   }
 
@@ -94,13 +91,16 @@ struct CompactTarget : public Target {
   }
 
   bool discard_library() override {
-    library_.reset();
-    model_ = nullptr;  // this weak pointer is no longer valid
+    if (model_ != nullptr) {
+      library_.reset();
+      model_ = nullptr;  // this weak pointer is no longer valid
+    }
     return true;
   }
 
   void forward(const std::vector<BaseScalar> &input,
                std::vector<BaseScalar> &output) override {
+    output.resize(output_dim());
     model_->forward_zero(input, output);
   }
 
@@ -108,18 +108,27 @@ struct CompactTarget : public Target {
                std::vector<std::vector<BaseScalar>> &outputs,
                const std::vector<BaseScalar> &global_input) override {
     outputs.resize(local_inputs.size());
+    for (auto &o : outputs) {
+      o.resize(output_dim());
+    }
     model_->forward_zero(&outputs, local_inputs, global_input);
   }
 
   void jacobian(const std::vector<BaseScalar> &input,
                 std::vector<BaseScalar> &output) override {
+    const auto jac_dim = input_dim() * output_dim();
+    output.resize(jac_dim);
     model_->jacobian(input, output);
   }
 
   void jacobian(const std::vector<std::vector<BaseScalar>> &local_inputs,
                 std::vector<std::vector<BaseScalar>> &outputs,
                 const std::vector<BaseScalar> &global_input = {}) override {
+    const auto jac_dim = input_dim() * output_dim();
     outputs.resize(local_inputs.size());
+    for (auto &o : outputs) {
+      o.resize(jac_dim);
+    }
     model_->jacobian(&outputs, local_inputs, global_input);
   }
 

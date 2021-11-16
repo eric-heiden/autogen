@@ -35,6 +35,8 @@ using BaseScalar = double;
  */
 enum AccumulationMethod { ACCUMULATE_NONE, ACCUMULATE_SUM, ACCUMULATE_MEAN };
 
+enum GenerationMode { MODE_NUMERICAL, MODE_CPPAD, MODE_CODEGEN };
+
 struct GeneratedBase {
  protected:
   int local_input_dim_{-1};

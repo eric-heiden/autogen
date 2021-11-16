@@ -27,7 +27,7 @@ class CompactCodeGen {
    */
   bool function_only_{false};
 
-  bool add_debug_prints_{false};
+  bool debug_mode_{false};
 
   // TODO create Language just once if possible
   // LanguageCompact language_;
@@ -47,8 +47,13 @@ class CompactCodeGen {
   //                bool function_only = false)
   //     : ModelSourceGen(fun, model), function_only_(function_only) {}
 
-  CompactCodeGen(const std::string &model_name, bool function_only = false)
-      : model_name_(model_name), function_only_(function_only) {}
+  CompactCodeGen(const std::string &model_name, bool function_only = false,
+                 bool debug_mode = false)
+      : model_name_(model_name),
+        function_only_(function_only),
+        debug_mode_(debug_mode) {}
+
+  virtual ~CompactCodeGen() = default;
 
   virtual void set_tape(CppAD::ADFun<CGBase> &fun) {
     fun_ = &fun;
@@ -95,6 +100,9 @@ class CompactCodeGen {
 
   bool is_function_only() const { return function_only_; }
   void set_function_only(bool option) { function_only_ = option; }
+
+  bool debug_mode() const { return debug_mode_; }
+  void set_debug_mode(bool d) { debug_mode_ = d; }
 
   AccumulationMethod &jacobian_acc_method() { return jac_acc_method_; }
   const AccumulationMethod &jacobian_acc_method() const {

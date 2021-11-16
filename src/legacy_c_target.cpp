@@ -3,12 +3,24 @@
 #include "autogen/utils/system.h"
 
 namespace autogen {
+// // helper class to get access to the source files from a ModelCSourceGen
+// // instance
+// struct SourceGrabber : public CppAD::cg::ModelCSourceGen<BaseScalar> {
+//   using CppAD::cg::ModelCSourceGen<BaseScalar>::_sources;
+//   SourceGrabber() = default;
+//   SourceGrabber(const CppAD::cg::ModelCSourceGen<BaseScalar> &source_gen) {
+//     _sources = source_gen._sources;
+//   }
+
+//   const std::map<std::string, std::string> &getSources() const {
+//     return _sources;
+//   }
+// };
 
 void LegacyCTarget::forward(const std::vector<BaseScalar> &input,
                             std::vector<BaseScalar> &output) {
   assert(!library_name_.empty());
-  auto model = get_cpu_model();
-  model->ForwardZero(input, output);
+  main_model_->ForwardZero(input, output);
 }
 
 void LegacyCTarget::forward(
@@ -24,8 +36,7 @@ void LegacyCTarget::forward(
 #pragma omp parallel for
   for (int i = 0; i < num_tasks; ++i) {
     if (global_input.empty()) {
-      auto model = get_cpu_model();
-      model->ForwardZero(local_inputs[i], outputs[i]);
+      main_model_->ForwardZero(local_inputs[i], outputs[i]);
     } else {
       static thread_local std::vector<BaseScalar> input;
       input = global_input;
@@ -33,16 +44,14 @@ void LegacyCTarget::forward(
       for (size_t j = 0; j < local_inputs[i].size(); ++j) {
         input[j + global_input.size()] = local_inputs[i][j];
       }
-      auto model = get_cpu_model();
-      model->ForwardZero(input, outputs[i]);
+      main_model_->ForwardZero(input, outputs[i]);
     }
   }
 }
 
 void LegacyCTarget::jacobian(const std::vector<BaseScalar> &input,
                              std::vector<BaseScalar> &output) {
-  auto model = get_cpu_model();
-  model->Jacobian(input, output);
+  main_model_->Jacobian(input, output);
 }
 
 void LegacyCTarget::jacobian(
@@ -58,9 +67,8 @@ void LegacyCTarget::jacobian(
 #pragma omp parallel for
   for (int i = 0; i < num_tasks; ++i) {
     if (global_input.empty()) {
-      auto model = get_cpu_model();
-      // model->ForwardZero(local_inputs[i], outputs[i]);
-      model->Jacobian(local_inputs[i], outputs[i]);
+      // main_model_->ForwardZero(local_inputs[i], outputs[i]);
+      main_model_->Jacobian(local_inputs[i], outputs[i]);
     } else {
       static thread_local std::vector<BaseScalar> input;
       if (input.empty()) {
@@ -70,36 +78,35 @@ void LegacyCTarget::jacobian(
       for (size_t j = 0; j < local_inputs[i].size(); ++j) {
         input[j + global_input.size()] = local_inputs[i][j];
       }
-      auto model = get_cpu_model();
-      model->Jacobian(input, outputs[i]);
+      main_model_->Jacobian(input, outputs[i]);
     }
   }
 }
 
-typename LegacyCTarget::GenericModelPtr LegacyCTarget::get_cpu_model() const {
+bool LegacyCTarget::load_library(const std::string &filename) {
   if (!cpu_library_) {
     cpu_library_loading_mutex_.lock();
-    cpu_library_ = std::make_shared<DynamicLib>(library_name_ + library_ext_);
+    cpu_library_ = std::make_shared<DynamicLib>(filename + library_ext_);
     std::set<std::string> model_names = cpu_library_->getModelNames();
-    std::cout << "Successfully loaded CPU library "
-              << library_name_ + library_ext_ << std::endl;
+    std::cout << "Successfully loaded CPU library " << filename + library_ext_
+              << std::endl;
     for (auto &name : model_names) {
       std::cout << "  Found model " << name << std::endl;
     }
     // load and wire up atomic functions in this library
     const auto &order = *CodeGenData::invocation_order;
     const auto &hierarchy = CodeGenData::call_hierarchy;
-    cpu_models_[this->name()] =
+    lib_models_[this->name()] =
         GenericModelPtr(cpu_library_->model(this->name()).release());
-    if (!cpu_models_[this->name()]) {
-      throw std::runtime_error("Failed to load model from library " +
-                               library_name_ + library_ext_);
+    if (!lib_models_[this->name()]) {
+      throw std::runtime_error("Failed to load model from library " + filename +
+                               library_ext_);
     }
     // atomic functions to be added
     typedef std::pair<std::string, std::string> ParentChild;
     std::set<ParentChild> remaining_atomics;
     for (const std::string &s :
-         cpu_models_[this->name()]->getAtomicFunctionNames()) {
+         lib_models_[this->name()]->getAtomicFunctionNames()) {
       remaining_atomics.insert(std::make_pair(this->name(), s));
     }
     while (!remaining_atomics.empty()) {
@@ -107,24 +114,25 @@ typename LegacyCTarget::GenericModelPtr LegacyCTarget::get_cpu_model() const {
       const std::string &parent = member.first;
       const std::string &atomic_name = member.second;
       remaining_atomics.erase(remaining_atomics.begin());
-      if (cpu_models_.find(atomic_name) == cpu_models_.end()) {
+      if (lib_models_.find(atomic_name) == lib_models_.end()) {
         std::cout << "  Adding atomic function " << atomic_name << std::endl;
-        cpu_models_[atomic_name] =
+        lib_models_[atomic_name] =
             GenericModelPtr(cpu_library_->model(atomic_name).release());
         for (const std::string &s :
-             cpu_models_[atomic_name]->getAtomicFunctionNames()) {
+             lib_models_[atomic_name]->getAtomicFunctionNames()) {
           remaining_atomics.insert(std::make_pair(atomic_name, s));
         }
       }
-      auto &atomic_model = cpu_models_[atomic_name];
-      cpu_models_[parent]->addAtomicFunction(atomic_model->asAtomic());
+      auto &atomic_model = lib_models_[atomic_name];
+      lib_models_[parent]->addAtomicFunction(atomic_model->asAtomic());
     }
 
     std::cout << "Loaded compiled model \"" << this->name() << "\" from \""
-              << library_name_ << "\".\n";
+              << filename << "\".\n";
     cpu_library_loading_mutex_.unlock();
   }
-  return cpu_models_[this->name()];
+  main_model_ = lib_models_[this->name()];
+  return true;
 }
 
 void LegacyCTarget::set_compiler_clang(
@@ -133,12 +141,12 @@ void LegacyCTarget::set_compiler_clang(
   if (compiler_path.empty()) {
     compiler_path = autogen::find_exe("clang");
   }
-  cpu_compiler_ = std::make_shared<ClangCompiler>(compiler_path);
+  compiler_ = std::make_shared<ClangCompiler>(compiler_path);
   for (const auto &flag : compile_flags) {
-    cpu_compiler_->addCompileFlag(flag);
+    compiler_->addCompileFlag(flag);
   }
   for (const auto &flag : compile_lib_flags) {
-    cpu_compiler_->addCompileLibFlag(flag);
+    compiler_->addCompileLibFlag(flag);
   }
 }
 
@@ -148,12 +156,12 @@ void LegacyCTarget::set_compiler_gcc(
   if (compiler_path.empty()) {
     compiler_path = autogen::find_exe("gcc");
   }
-  cpu_compiler_ = std::make_shared<GccCompiler>(compiler_path);
+  compiler_ = std::make_shared<GccCompiler>(compiler_path);
   for (const auto &flag : compile_flags) {
-    cpu_compiler_->addCompileFlag(flag);
+    compiler_->addCompileFlag(flag);
   }
   for (const auto &flag : compile_lib_flags) {
-    cpu_compiler_->addCompileLibFlag(flag);
+    compiler_->addCompileLibFlag(flag);
   }
 }
 
@@ -167,12 +175,12 @@ void LegacyCTarget::set_compiler_msvc(
   if (linker_path.empty()) {
     linker_path = autogen::find_exe("link.exe");
   }
-  cpu_compiler_ = std::make_shared<MsvcCompiler>(compiler_path, linker_path);
+  compiler_ = std::make_shared<MsvcCompiler>(compiler_path, linker_path);
   for (const auto &flag : compile_flags) {
-    cpu_compiler_->addCompileFlag(flag);
+    compiler_->addCompileFlag(flag);
   }
   for (const auto &flag : compile_lib_flags) {
-    cpu_compiler_->addCompileLibFlag(flag);
+    compiler_->addCompileLibFlag(flag);
   }
 }
 
@@ -180,16 +188,18 @@ bool LegacyCTarget::generate_code_() {
   using namespace CppAD;
   using namespace CppAD::cg;
 
-  ModelCSourceGen<BaseScalar> main_source_gen(*(this->main_trace().tape),
-                                              this->name());
-  main_source_gen.setCreateForwardZero(generate_forward_);
-  main_source_gen.setCreateJacobian(generate_jacobian_);
+  auto *main_source_gen =
+      new ModelCSourceGen<BaseScalar>(*(this->main_trace().tape), this->name());
+  main_source_gen->setCreateForwardZero(generate_forward_);
+  main_source_gen->setCreateJacobian(generate_jacobian_);
   libcgen_ =
-      std::make_shared<ModelLibraryCSourceGen<BaseScalar>>(main_source_gen);
+      std::make_shared<ModelLibraryCSourceGen<BaseScalar>>(*main_source_gen);
+
   // reverse order of invocation to first generate code for innermost
   // functions
   const auto &order = *CodeGenData::invocation_order;
-  std::list<ModelCSourceGen<BaseScalar> *> models;
+  models_.clear();
+  models_.push_back(main_source_gen);
   for (auto it = order.rbegin(); it != order.rend(); ++it) {
     FunctionTrace &trace = (*CodeGenData::traces)[*it];
     // trace.tape->optimize();
@@ -199,9 +209,9 @@ bool LegacyCTarget::generate_code_() {
     // source_gen->setCreateJacobian(generate_jacobian_);
     source_gen->setCreateForwardOne(generate_jacobian_);
     source_gen->setCreateReverseOne(generate_jacobian_);
-    models.push_back(source_gen);
+    models_.push_back(source_gen);
     // we need a stable reference
-    libcgen_->addModel(*(models.back()));
+    libcgen_->addModel(*(models_.back()));
   }
   libcgen_->setVerbose(true);
 
@@ -220,29 +230,87 @@ bool LegacyCTarget::compile_() {
     //     "present. The code first needs to be generated.");
     generate_code();
   }
-  
-  if (cpu_compiler_ == nullptr) {
+
+  if (compiler_ == nullptr) {
 #if AUTOGEN_SYSTEM_WIN
     set_compiler_msvc();
 #else
     set_compiler_clang();
 #endif
   }
-  cpu_compiler_->setSourcesFolder(sources_folder_);
-  cpu_compiler_->setTemporaryFolder(temp_folder_);
-  cpu_compiler_->setSaveToDiskFirst(true);
-  if (debug_mode_) {
-    cpu_compiler_->addCompileFlag("-g");
-    cpu_compiler_->addCompileFlag("-O0");
-  } else {
-    cpu_compiler_->addCompileFlag("-O" + std::to_string(optimization_level_));
-  }
+  compiler_->setSourcesFolder(sources_folder_);
+  compiler_->setTemporaryFolder(temp_folder_);
+  compiler_->setSaveToDiskFirst(true);
 
-  DynamicModelLibraryProcessor<BaseScalar> p(*libcgen_);
-  p.setLibraryName(name() + "_" + std::to_string(type_));
-  bool load_library = false;  // we do this in another step
-  p.createDynamicLibrary(*cpu_compiler_, load_library);
-  library_name_ = "./" + name() + "_" + std::to_string(type_);
+// TODO check type of compiler here, not operating system
+#if AUTOGEN_SYSTEM_WIN
+  if (debug_mode_) {
+    compiler_->addCompileFlag("/DEBUG:FULL");
+    compiler_->addCompileLibFlag("/DEBUG:FULL");
+    compiler_->addCompileFlag("/Od");
+  } else {
+    compiler_->addCompileFlag("/O" + std::to_string(optimization_level_));
+  }
+#else
+  if (debug_mode_) {
+    compiler_->addCompileFlag("-O0");
+    compiler_->addCompileFlag("-g");
+  } else {
+    compiler_->addCompileFlag("-O" + std::to_string(optimization_level_));
+  }
+#endif
+
+  CppAD::cg::JobTimer *timer = new CppAD::cg::JobTimer();
+
+  timer->startingJob("", JobTimer::DYNAMIC_MODEL_LIBRARY);
+
+  std::map<std::string, std::string> source_files =
+      libcgen_->getLibrarySources();
+  // for (const auto &[filename, content] : sources_) {
+  //   if (std::find(source_filenames_.begin(), source_filenames_.end(),
+  //                 filename) != source_filenames_.end()) {
+  //     source_files[filename] = content;
+  //   }
+  // }
+
+  try {
+    // const std::map<std::string, CppAD::cg::ModelCSourceGen<BaseScalar> *>
+    //     &models = libcgen_->getModels();
+    auto mt_type = CppAD::cg::MultiThreadingType::NONE;
+    for (const auto* model : models_) {
+      const std::map<std::string, std::string> &modelSources =
+          model->getSources();
+
+      timer->startingJob("", CppAD::cg::JobTimer::COMPILING_FOR_MODEL);
+      compiler_->compileSources(modelSources, true, timer);
+      timer->finishedJob();
+    }
+
+    // const std::map<std::string, std::string> &sources =
+    //     this->getLibrarySources();
+    compiler_->compileSources(source_files, true, timer);
+
+    library_name_ =
+        source_folder_prefix_ + name() + "_" + std::to_string(type_);
+    std::string libname = library_name_ + library_ext_;
+
+    compiler_->buildDynamic(libname, timer);
+
+  } catch (...) {
+    compiler_->cleanup();
+    library_name_ = "";
+    throw;
+  }
+  compiler_->cleanup();
+
+  timer->finishedJob();
+
+  // library_name_ = source_folder_prefix_ + name() + "_" +
+  // std::to_string(type_);
+  //   DynamicModelLibraryProcessor<BaseScalar> p(*libcgen_);
+  //   p.setLibraryName(library_name_);
+  //   bool load_library = false;  // we do this in another step
+  //   p.createDynamicLibrary(*compiler_, load_library);
 
   return true;
 }

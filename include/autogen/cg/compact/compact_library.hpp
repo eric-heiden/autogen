@@ -64,13 +64,13 @@ class CompactLibrary {
    * Opens the dynamic library with the given basename (filename without
    * extension), and loads the models.
    */
+#if AUTOGEN_SYSTEM_WIN
   virtual void load(const std::string &library_basename,
                     std::string path = "") {
     path += library_basename + library_ext_;
     std::string abs_path;
     bool found = autogen::FileUtils::find_file(path, abs_path);
     assert(found);
-#if AUTOGEN_SYSTEM_WIN
     lib_handle_ = LoadLibrary(abs_path.c_str());
     if (lib_handle_ == nullptr) {
       throw std::runtime_error("Failed to dynamically load library '" +
@@ -78,6 +78,12 @@ class CompactLibrary {
                                "': " + GetLastErrorAsString());
     }
 #else
+  virtual void load(const std::string &library_basename, std::string path = "",
+                    int dlOpenMode = RTLD_NOW) {
+    path += library_basename + library_ext_;
+    std::string abs_path;
+    bool found = autogen::FileUtils::find_file(path, abs_path);
+    assert(found);
     lib_handle_ = dlopen(abs_path.c_str(), dlOpenMode);
     // _dynLibHandle = dlmopen(LM_ID_NEWLM, path.c_str(), RTLD_NOW);
     if (lib_handle_ == nullptr) {
@@ -114,13 +120,12 @@ class CompactLibrary {
 #else
     dlclose(lib_handle_);
 #endif
-    lib_handle_ = nullptr;
+//     lib_handle_ = nullptr;
   }
 
   virtual ~CompactLibrary() { clear(); }
 
-  CompactModel<LibFunction>* get_model(
-      const std::string &model_name) const {
+  CompactModel<LibFunction> *get_model(const std::string &model_name) const {
     return models_.at(model_name).get();
   }
   bool has_model(const std::string &model_name) const {

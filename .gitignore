@@ -132,9 +132,10 @@ dmypy.json
 .vscode
 .vs
 
-*srcs/
+.autogen/
 *.dll
 *.so
 *.exp
 *.lib
 *.a
+log*.txt

@@ -41,9 +41,17 @@ class GeneratedCodeGen : public GeneratedBase {
     local_input_dim_ = main_trace_.input_dim;
   }
 
-  GeneratedCodeGen(const std::string &name, ADFun* tape)
-      : name_(name) {
+  GeneratedCodeGen(const std::string &name, ADFun *tape) : name_(name) {
     main_trace_.tape = tape;
+    output_dim_ = static_cast<int>(tape->Range());
+    local_input_dim_ = static_cast<int>(tape->Domain());
+    std::cout << "tape->Range():  " << tape->Range() << std::endl;
+    std::cout << "tape->Domain(): " << tape->Domain() << std::endl;
+  }
+
+  GeneratedCodeGen(const std::string &name, std::shared_ptr<ADFun> tape)
+      : name_(name) {
+    main_trace_.tape = tape.get();
     output_dim_ = static_cast<int>(tape->Range());
     local_input_dim_ = static_cast<int>(tape->Domain());
     std::cout << "tape->Range():  " << tape->Range() << std::endl;
@@ -79,22 +87,18 @@ class GeneratedCodeGen : public GeneratedBase {
   bool generate_code();
   bool compile();
 
-  void autogen::GeneratedCodeGen::operator()(
-      const std::vector<BaseScalar> &input,
-      std::vector<BaseScalar> &output) override;
+  void operator()(const std::vector<BaseScalar> &input,
+                  std::vector<BaseScalar> &output) override;
 
-  void autogen::GeneratedCodeGen::operator()(
-      const std::vector<std::vector<BaseScalar>> &local_inputs,
-      std::vector<std::vector<BaseScalar>> &outputs,
-      const std::vector<BaseScalar> &global_input) override;
+  void operator()(const std::vector<std::vector<BaseScalar>> &local_inputs,
+                  std::vector<std::vector<BaseScalar>> &outputs,
+                  const std::vector<BaseScalar> &global_input) override;
 
-  void autogen::GeneratedCodeGen::jacobian(
-      const std::vector<BaseScalar> &input,
-      std::vector<BaseScalar> &output) override;
+  void jacobian(const std::vector<BaseScalar> &input,
+                std::vector<BaseScalar> &output) override;
 
-  void autogen::GeneratedCodeGen::jacobian(
-      const std::vector<std::vector<BaseScalar>> &local_inputs,
-      std::vector<std::vector<BaseScalar>> &outputs,
-      const std::vector<BaseScalar> &global_input) override;
+  void jacobian(const std::vector<std::vector<BaseScalar>> &local_inputs,
+                std::vector<std::vector<BaseScalar>> &outputs,
+                const std::vector<BaseScalar> &global_input) override;
 };
 }  // namespace autogen

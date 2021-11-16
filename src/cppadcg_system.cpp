@@ -21,4 +21,9 @@ void call_atomic_fun_bridge(
     std::vector<CppAD::AD<CppAD::cg::CG<BaseScalar>>>& output) {
   (*bridge)(input, output);
 }
+
+void print_bridge(CppAD::cg::CGAtomicFunBridge<BaseScalar>* bridge) {
+  std::cout << "Calling bridge \"" << bridge->atomic_name()
+            << "\" (ID: " << bridge->getId() << ")" << std::endl;
+}
 }  // namespace autogen

@@ -6,6 +6,7 @@ namespace autogen {
 template <class CodeGenT, class LibFunctionT>
 bool CompactTarget<CodeGenT, LibFunctionT>::generate_code_() {
   LanguageCompact::add_debug_prints = debug_mode_;
+  codegen_->set_debug_mode(debug_mode_);
   sources_.push_back(std::make_pair("util.h", util_header_src_()));
   sources_.push_back(std::make_pair("model_info.cpp", model_info_src_()));
   source_filenames_.push_back("model_info.cpp");
@@ -15,11 +16,11 @@ bool CompactTarget<CodeGenT, LibFunctionT>::generate_code_() {
   // reverse order of invocation to first generate code for innermost
   // functions
   const auto &order = *CodeGenData::invocation_order;
-  std::vector<std::shared_ptr<CodeGenT>> models;
+  std::vector<CodeGenT *> models;
   for (auto it = order.rbegin(); it != order.rend(); ++it) {
     FunctionTrace &trace = (*CodeGenData::traces)[*it];
     bool is_function_only = true;
-    auto source_gen = std::make_shared<CodeGen>(*it, is_function_only);
+    auto source_gen = new CodeGen(*it, is_function_only, debug_mode_);
     source_gen->set_tape(*trace.tape);
     // source_gen->setCreateSparseJacobian(true);
     // source_gen->setCreateJacobian(true);
@@ -31,7 +32,7 @@ bool CompactTarget<CodeGenT, LibFunctionT>::generate_code_() {
   }
   codegen_->create_forward_zero(generate_forward_);
   codegen_->create_jacobian(generate_jacobian_);
-  models.push_back(codegen_);
+  models.push_back(codegen_.get());
 
   std::string header_filename = name() + header_ext;
   std::string source_prepend = "#include \"" + header_filename + "\"\n";
@@ -83,13 +84,17 @@ bool CompactTarget<CodeGenT, LibFunctionT>::generate_code_() {
     }
   }
 
+  // delete code generators for atomic functions (they were only temporary)
+  for (size_t i = 0; i < models.size() - 1; ++i) {
+    delete models[i];
+  }
+
   header_code << "#endif  // " << name() << "_H\n";
   sources_.push_back(std::make_pair(header_filename, header_code.str()));
 
   // generate "main" source file
   std::stringstream main_file;
   main_file << "#include \"util.h\"\n";
-  main_file << "#include \"model_info.h\"\n\n";
   for (const auto &src : source_filenames_) {
     main_file << "#include \"" << src << "\"\n";
   }
@@ -106,6 +111,7 @@ std::string CompactTarget<CodeGenT, LibFunctionT>::util_header_src_() const {
   std::ostringstream code;
   code << "#ifndef UTILS_H\n#define UTILS_H\n\n";
   code << "#include <math.h>\n";
+  code << "#include <string.h>\n";
   code << "#include <stdio.h>\n";
   code << "#include <stdlib.h>\n\n";
 
@@ -133,8 +139,7 @@ inline void allocate(Float **x, int size) {
 }
 
 template <class CodeGenT, class LibFunctionT>
-std::string CompactTarget<CodeGenT, LibFunctionT>::model_info_src_()
-    const {
+std::string CompactTarget<CodeGenT, LibFunctionT>::model_info_src_() const {
   std::ostringstream code;
   code << "#ifndef MODEL_INFO_H\n#define MODEL_INFO_H\n\n";
   code << "#include \"util.h\"\n\n";
@@ -144,12 +149,7 @@ std::string CompactTarget<CodeGenT, LibFunctionT>::model_info_src_()
   code << "  static const char *const models[] = {\n";
   std::vector<std::string> accessible_kernels;
   // XXX we could support multiple models in the same library in the future
-  std::vector<std::shared_ptr<CodeGenT>> models{codegen_};
-  for (const auto &cgen : models) {
-    if (!cgen->is_function_only()) {
-      accessible_kernels.push_back(cgen->name());
-    }
-  }
+  accessible_kernels.push_back(codegen_->name());
   for (std::size_t i = 0; i < accessible_kernels.size(); ++i) {
     code << "    \"" << accessible_kernels[i] << "\"";
     if (i < accessible_kernels.size() - 1) {
@@ -249,7 +249,9 @@ bool CompactTarget<CodeGenT, LibFunctionT>::create_cmake_project(
     file.close();
   }
 
-  std::cout << "Created CMake project files at \""
-            << FileUtils::abs_path(destination_folder) << "\"" << std::endl;
+  std::string abs_folder = FileUtils::abs_path(destination_folder);
+  std::cout << "Created CMake project files at \"" << abs_folder << "\""
+            << std::endl;
+  return true;
 }
 }  // namespace autogen

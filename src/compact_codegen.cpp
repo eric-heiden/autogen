@@ -142,7 +142,7 @@ void CompactCodeGen::emit_function(
     // code << "  Float* dy = out[0];\n\n";
     code << "  Float* dy = out;\n\n";
 
-    if (add_debug_prints_) {
+    if (debug_mode_) {
       code << "  printf(\"\\t" << kernel_name << ":\\n\");\n";
       code << "  printf(\"\\tx:  \"); for (unsigned long i = 0; i < "
            << local_input_dim
@@ -159,7 +159,7 @@ void CompactCodeGen::emit_function(
     // code << "  Float* dy = out[0];\n\n";
     code << "  Float* dw = out;\n\n";
 
-    if (add_debug_prints_) {
+    if (debug_mode_) {
       code << "  printf(\"\\t" << kernel_name << ":\\n\");\n";
       code << "  printf(\"\\tx:   \"); for (unsigned long i = 0; i < "
            << local_input_dim
@@ -207,7 +207,7 @@ void CompactCodeGen::emit_function(
   // }
   code << body_str;
 
-  if (add_debug_prints_) {
+  if (debug_mode_) {
     code << "  printf(\"\\t" << kernel_name << ":\\n\");\n";
     if (is_forward_one || is_reverse_one) {
       code << "  printf(\"\\tx:   \"); for (unsigned long i = 0; i < "
@@ -295,21 +295,26 @@ void CompactCodeGen::emit_function_signature(std::ostringstream &code) const {
     return;
   }
   if (create_forward_zero()) {
+    code << function_type_prefix(true);
     code << "MODULE_API void " << model_name_;
     code << "_forward_zero(Float *out, const Float *local_input);\n";
   }
   if (create_forward_one()) {
+    code << function_type_prefix(true);
     code << "MODULE_API int " << model_name_;
     code << "_forward_one(Float *out, const Float *x, const Float *dx, "
             "unsigned long nnzTx, const unsigned long *idx);\n";
+    code << function_type_prefix(true);
     code << "MODULE_API void " << model_name_;
     code << "_forward_one_sparsity(unsigned long pos, unsigned long const** "
             "elements, unsigned long* nnz);\n";
   }
   if (create_reverse_one()) {
+    code << function_type_prefix(true);
     code << "MODULE_API int " << model_name_;
     code << "_reverse_one(Float *out, const Float *x, const Float *py, "
             "unsigned long nnzTx, const unsigned long *idx);\n";
+    code << function_type_prefix(true);
     code << "MODULE_API void " << model_name_;
     code << "_reverse_one_sparsity(unsigned long pos, unsigned long const** "
             "elements, unsigned long* nnz);\n";
