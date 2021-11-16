@@ -3,14 +3,8 @@
 // clang-format off
 #include <functional>
 
-#include <cppad/cg.hpp>
-#include <cppad/cg/arithmetic.hpp>
-
-#ifdef USE_EIGEN
-#include <cppad/cg/support/cppadcg_eigen.hpp>
-#endif
-
 #include "base.hpp"
+#include "types.hpp"
 // clang-format on
 
 namespace autogen {

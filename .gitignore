@@ -72,7 +72,7 @@ instance/
 docs/_build/
 
 # PyBuilder
-target/
+# target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -132,9 +132,10 @@ dmypy.json
 .vscode
 .vs
 
-*srcs/
+.autogen/
 *.dll
 *.so
 *.exp
 *.lib
 *.a
+log*.txt

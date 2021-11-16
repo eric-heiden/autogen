@@ -14,8 +14,7 @@
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
 
-namespace py = pybind11;;
-;
+namespace py = pybind11;
 using namespace autogen;
 
 PYBIND11_MAKE_OPAQUE(ADVector);
@@ -106,19 +105,21 @@ PYBIND11_MODULE(_autogen, m) {
   py::bind_vector<ADVector>(m, "ADVector");
   py::bind_vector<ADCGVector>(m, "ADCGVector");
 
-  py::enum_<ScalarType>(m, "Mode")
-      .value("DOUBLE", ScalarType::SCALAR_DOUBLE)
-      .value("CPPAD", ScalarType::SCALAR_CPPAD)
-      .value("CODEGEN", ScalarType::SCALAR_CODEGEN)
+  py::enum_<GenerationMode>(m, "Mode")
+      .value("DOUBLE", GenerationMode::MODE_NUMERICAL)
+      .value("CPPAD", GenerationMode::MODE_CPPAD)
+      .value("CODEGEN", GenerationMode::MODE_CODEGEN)
       .export_values();
 
-  py::enum_<CodeGenTarget>(m, "Target")
-      .value("CPU", CodeGenTarget::TARGET_CPU)
-      .value("CUDA", CodeGenTarget::TARGET_CUDA)
+  py::enum_<TargetType>(m, "Target")
+      .value("OPENMP", TargetType::TARGET_OPENMP)
+      .value("CUDA", TargetType::TARGET_CUDA)
+      .value("LEGACY_C", TargetType::TARGET_LEGACY_C)
       .export_values();
 
   m.def("get_mode", []() { return get_scope()->mode; });
-  m.def("set_mode", [](const ScalarType& mode) { get_scope()->mode = mode; });
+  m.def("set_mode",
+        [](const GenerationMode& mode) { get_scope()->mode = mode; });
 
   expose_scalar<ADScalar>(m, "ADScalar").def("__repr__", [](const ADScalar& s) {
     return "ad<" + std::to_string(CppAD::Value(CppAD::Var2Par(s))) + ">";
@@ -136,11 +137,11 @@ PYBIND11_MODULE(_autogen, m) {
 
   m.def("scalar_name", []() {
     switch (get_scope()->mode) {
-      case SCALAR_CPPAD:
+      case MODE_CPPAD:
         return "AD";
-      case SCALAR_CODEGEN:
+      case MODE_CODEGEN:
         return "ADCG";
-      case SCALAR_DOUBLE:
+      case MODE_NUMERICAL:
       default:
         return "double";
     }
@@ -178,13 +179,13 @@ PYBIND11_MODULE(_autogen, m) {
     CppAD::Independent(x);
     // XXX save tape table for thread 0
     py::set_shared_data("tape_table_ad", ADScalar::tape_table[0]);
-    // py::set_shared_data("traces", &CodeGenData<BaseScalar>::traces);
+    // py::set_shared_data("traces", &CodeGenData::traces);
     // py::set_shared_data("is_dry_run",
-    // &CodeGenData<BaseScalar>::is_dry_run);
+    // &CodeGenData::is_dry_run);
     // py::set_shared_data("call_hierarchy",
-    // &CodeGenData<BaseScalar>::call_hierarchy);
+    // &CodeGenData::call_hierarchy);
     // py::set_shared_data("invocation_order",
-    // CodeGenData<BaseScalar>::invocation_order);
+    // CodeGenData::invocation_order);
   });
 
   // For ADCGScalar
@@ -206,29 +207,25 @@ PYBIND11_MODULE(_autogen, m) {
     // XXX save tape table for thread 0
     py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
     py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
-    py::set_shared_data("atomic_index_infos", CppAD::atomic_index_infos);
-    py::set_shared_data("traces", CodeGenData<BaseScalar>::traces);
-    py::set_shared_data("is_dry_run", &CodeGenData<BaseScalar>::is_dry_run);
-    py::set_shared_data("call_hierarchy",
-                        &CodeGenData<BaseScalar>::call_hierarchy);
+    py::set_shared_data("atomic_index_infos", CppAD::local::atomic_index_infos);
+    py::set_shared_data("traces", CodeGenData::traces);
+    py::set_shared_data("is_dry_run", &CodeGenData::is_dry_run);
+    py::set_shared_data("call_hierarchy", &CodeGenData::call_hierarchy);
 
-    py::set_shared_data("invocation_order",
-                        CodeGenData<BaseScalar>::invocation_order);
-    // std::cout << "ADCG Atomic index infos has "
-    //           << CppAD::atomic_index_infos->size() << " entries.\n";
+    py::set_shared_data("invocation_order", CodeGenData::invocation_order);
+    std::cout << "ADCG Atomic index infos has "
+              << CppAD::local::atomic_index_infos->size() << " entries.\n";
   });
 
   m.def("init_shared_data", []() {
     py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
     py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
-    py::set_shared_data("atomic_index_infos", CppAD::atomic_index_infos);
-    py::set_shared_data("traces", CodeGenData<BaseScalar>::traces);
-    py::set_shared_data("is_dry_run", &CodeGenData<BaseScalar>::is_dry_run);
-    py::set_shared_data("call_hierarchy",
-                        &CodeGenData<BaseScalar>::call_hierarchy);
+    py::set_shared_data("atomic_index_infos", CppAD::local::atomic_index_infos);
+    py::set_shared_data("traces", CodeGenData::traces);
+    py::set_shared_data("is_dry_run", &CodeGenData::is_dry_run);
+    py::set_shared_data("call_hierarchy", &CodeGenData::call_hierarchy);
 
-    py::set_shared_data("invocation_order",
-                        CodeGenData<BaseScalar>::invocation_order);
+    py::set_shared_data("invocation_order", CodeGenData::invocation_order);
   });
 
   py::class_<autogen::GeneratedCppAD>(m, "GeneratedCppAD")
@@ -375,21 +372,41 @@ PYBIND11_MODULE(_autogen, m) {
             return outputs;
           },
           "Evaluates the Jacobian of the function")
-      .def("compile_cpu", &autogen::GeneratedCodeGen::compile_cpu,
-           "Compile to a CPU-bound shared library",
-           py::call_guard<py::scoped_ostream_redirect,
-                          py::scoped_estream_redirect>())
-      .def("compile_cuda", &autogen::GeneratedCodeGen::compile_cuda,
-           "Compile to a GPU-bound shared library",
-           py::call_guard<py::scoped_ostream_redirect,
-                          py::scoped_estream_redirect>())
-      .def_readwrite("optimization_level",
-                     &autogen::GeneratedCodeGen::optimization_level)
-      .def_readwrite("generate_forward",
-                     &autogen::GeneratedCodeGen::generate_forward)
-      .def_readwrite("generate_jacobian",
-                     &autogen::GeneratedCodeGen::generate_jacobian)
-      .def_readwrite("debug_mode", &autogen::GeneratedCodeGen::debug_mode)
+      .def("generate_code", &autogen::GeneratedCodeGen::generate_code)
+      .def("compile", &autogen::GeneratedCodeGen::compile)
+      .def(
+          "create_cmake_project",
+          [](autogen::GeneratedCodeGen& gen,
+             const std::string& destination_folder,
+             const std::vector<std::vector<BaseScalar>>& local_inputs,
+             const std::vector<BaseScalar>& global_input) {
+            return gen.target()->create_cmake_project(
+                destination_folder, local_inputs, global_input);
+          },
+          py::arg("destination_folder"), py::arg("local_inputs"),
+          py::arg("global_input") = std::vector<BaseScalar>{})
+      // .def("compile_cpu", &autogen::GeneratedCodeGen::compile_cpu,
+      //      "Compile to a CPU-bound shared library",
+      //      py::call_guard<py::scoped_ostream_redirect,
+      //                     py::scoped_estream_redirect>())
+      // .def("compile_cuda", &autogen::GeneratedCodeGen::compile_cuda,
+      //      "Compile to a GPU-bound shared library",
+      //      py::call_guard<py::scoped_ostream_redirect,
+      //                     py::scoped_estream_redirect>())
+      // .def_readwrite("optimization_level",
+      //                &autogen::GeneratedCodeGen::optimization_level)
+      // .def_readwrite("generate_forward",
+      //                &autogen::GeneratedCodeGen::generate_forward)
+      // .def_readwrite("generate_jacobian",
+      //                &autogen::GeneratedCodeGen::generate_jacobian)
+      .def_property(
+          "debug_mode",
+          [](const autogen::GeneratedCodeGen& gen) {
+            return gen.target()->debug_mode();
+          },
+          [](autogen::GeneratedCodeGen& gen, bool d) {
+            gen.target()->set_debug_mode(d);
+          })
       .def_property_readonly("local_input_dim",
                              &autogen::GeneratedCodeGen::local_input_dim)
       .def_property_readonly("output_dim",
@@ -400,43 +417,45 @@ PYBIND11_MODULE(_autogen, m) {
                     &autogen::GeneratedCodeGen::set_global_input_dim)
       .def_property_readonly("is_compiled",
                              &autogen::GeneratedCodeGen::is_compiled)
-      .def_property("target", &autogen::GeneratedCodeGen::target,
-                    &autogen::GeneratedCodeGen::set_target)
-      .def("set_cpu_compiler_clang",
-           &autogen::GeneratedCodeGen::set_cpu_compiler_clang,
-           py::arg("compiler_path") = "",
-           py::arg("compile_flags") = std::vector<std::string>{},
-           py::arg("compile_lib_flags") = std::vector<std::string>{})
-      .def("set_cpu_compiler_gcc",
-           &autogen::GeneratedCodeGen::set_cpu_compiler_gcc,
-           py::arg("compiler_path") = "",
-           py::arg("compile_flags") = std::vector<std::string>{},
-           py::arg("compile_lib_flags") = std::vector<std::string>{})
-      .def("set_cpu_compiler_msvc",
-           &autogen::GeneratedCodeGen::set_cpu_compiler_msvc,
-           py::arg("compiler_path") = "", py::arg("linker_path") = "",
-           py::arg("compile_flags") = std::vector<std::string>{},
-           py::arg("compile_lib_flags") = std::vector<std::string>{})
+      .def_property_readonly("target", &autogen::GeneratedCodeGen::target_type)
+      // .def_property("target", &autogen::GeneratedCodeGen::target,
+      //               &autogen::GeneratedCodeGen::set_target)
+      .def("set_target", [](autogen::GeneratedCodeGen& gen,
+                            TargetType type) { gen.set_target(type); })
+      // .def("set_cpu_compiler_clang",
+      //      &autogen::GeneratedCodeGen::set_cpu_compiler_clang,
+      //      py::arg("compiler_path") = "",
+      //      py::arg("compile_flags") = std::vector<std::string>{},
+      //      py::arg("compile_lib_flags") = std::vector<std::string>{})
+      // .def("set_cpu_compiler_gcc",
+      //      &autogen::GeneratedCodeGen::set_cpu_compiler_gcc,
+      //      py::arg("compiler_path") = "",
+      //      py::arg("compile_flags") = std::vector<std::string>{},
+      //      py::arg("compile_lib_flags") = std::vector<std::string>{})
+      // .def("set_cpu_compiler_msvc",
+      //      &autogen::GeneratedCodeGen::set_cpu_compiler_msvc,
+      //      py::arg("compiler_path") = "", py::arg("linker_path") = "",
+      //      py::arg("compile_flags") = std::vector<std::string>{},
+      //      py::arg("compile_lib_flags") = std::vector<std::string>{})
 
       .def("discard_library", &autogen::GeneratedCodeGen::discard_library)
-      .def_property("library_name", &autogen::GeneratedCodeGen::library_name,
-                    &autogen::GeneratedCodeGen::load_precompiled_library);
+      .def("load_library", &autogen::GeneratedCodeGen::load_library);
 
-  py::class_<CodeGenData<BaseScalar>>(m, "CodeGenData")
-      .def_static("clear", &CodeGenData<BaseScalar>::clear)
+  py::class_<CodeGenData>(m, "CodeGenData")
+      .def_static("clear", &CodeGenData::clear)
       .def_static("has_trace",
                   [](const std::string& name) {
-                    return CodeGenData<BaseScalar>::traces->find(name) !=
-                           CodeGenData<BaseScalar>::traces->end();
+                    return CodeGenData::traces->find(name) !=
+                           CodeGenData::traces->end();
                   })
       .def_static("update_call_hierarchy",
                   [](const std::string& name) {
-                    auto& order = *CodeGenData<BaseScalar>::invocation_order;
+                    auto& order = *CodeGenData::invocation_order;
                     if (!order.empty()) {
                       // the current function is called by another function,
                       // hence update the call hierarchy
                       const std::string& parent = order.back();
-                      auto& hierarchy = CodeGenData<BaseScalar>::call_hierarchy;
+                      auto& hierarchy = CodeGenData::call_hierarchy;
                       if (hierarchy.find(parent) == hierarchy.end()) {
                         hierarchy[parent] = std::vector<std::string>();
                       }
@@ -444,55 +463,56 @@ PYBIND11_MODULE(_autogen, m) {
                     }
                     order.push_back(name);
                   })
-      .def_static("is_dry_run",
-                  []() {
-                    return CodeGenData<BaseScalar>::is_dry_run;
-                  })
+      .def_static("is_dry_run", []() { return CodeGenData::is_dry_run; })
       .def_static("set_dry_run",
                   [](bool dry_run) {
-                    CodeGenData<BaseScalar>::is_dry_run = dry_run;
+                    CodeGenData::is_dry_run = dry_run;
                     // std::cout << "Setting dry run to " << std::boolalpha
-                    //           << CodeGenData<BaseScalar>::is_dry_run << "\n";
+                    //           << CodeGenData::is_dry_run << "\n";
                   })
-      .def_readwrite_static("invocation_order",
-                            &CodeGenData<BaseScalar>::invocation_order)
-      .def_readwrite_static("call_hierarchy",
-                            &CodeGenData<BaseScalar>::call_hierarchy)
-      .def_static(
-          "register_trace",
-          [](const std::string& name, const std::shared_ptr<ADCGFun>& tape) {
-            using CGAtomicFunBridge =
-                typename CppAD::cg::CGAtomicFunBridge<BaseScalar>;
-            FunctionTrace<BaseScalar>& trace =
-                (*CodeGenData<BaseScalar>::traces)[name];
-            std::cout << "Adding trace for atomic function \"" << name
-                      << "\"...\n";
-            trace.tape = tape;
-            trace.bridge = new CGAtomicFunBridge(name, *(trace.tape), true);
-            trace.input_dim = tape->Domain();
-            trace.output_dim = tape->Range();
-          })
+      .def_readwrite_static("invocation_order", &CodeGenData::invocation_order)
+      .def_readwrite_static("call_hierarchy", &CodeGenData::call_hierarchy)
+      .def_static("register_trace",
+                  [](const std::string& name, std::shared_ptr<ADCGFun> tape) {
+                    if (get_scope()->mode == MODE_CPPAD) {
+                      retrieve_tape<ADScalar>();
+                    } else if (get_scope()->mode == MODE_CODEGEN) {
+                      retrieve_tape<ADCGScalar>();
+                    }
+                    FunctionTrace& trace = (*CodeGenData::traces)[name];
+                    std::cout << "Adding trace for atomic function \"" << name
+                              << "\"...\n";
+                    trace.tape = tape.get();
+                    trace.bridge = autogen::create_atomic_fun_bridge(
+                        name, *(trace.tape), true);
+                    trace.input_dim = tape->Domain();
+                    trace.output_dim = tape->Range();
+                  })
       .def_static("trace_existing_atomics",
                   []() {
-                    // if (get_scope()->mode == SCALAR_CPPAD) {
-                    //   retrieve_tape<ADScalar>();
-                    // } else if (get_scope()->mode == SCALAR_CODEGEN) {
-                    //   retrieve_tape<ADCGScalar>();
-                    // }
+                    if (get_scope()->mode == MODE_CPPAD) {
+                      retrieve_tape<ADScalar>();
+                    } else if (get_scope()->mode == MODE_CODEGEN) {
+                      retrieve_tape<ADCGScalar>();
+                    }
                     trace_existing_atomics();
                   })
       .def_static("call_bridge", [](const std::string& name,
                                     const ADCGVector& input) {
-        if (CodeGenData<BaseScalar>::traces->find(name) ==
-            CodeGenData<BaseScalar>::traces->end()) {
+        if (CodeGenData::traces->find(name) == CodeGenData::traces->end()) {
           throw std::runtime_error("Could not find trace with name \"" + name +
                                    "\" while attempting to call the "
                                    "corresponding function bridge.");
         }
-        FunctionTrace<BaseScalar>& trace =
-            (*CodeGenData<BaseScalar>::traces)[name];
+        FunctionTrace& trace = (*CodeGenData::traces)[name];
         ADCGVector output(trace.output_dim);
-        (*(trace.bridge))(input, output);
+        if (trace.bridge == nullptr) {
+          throw std::runtime_error(
+              "Tape for atomic function bridge with name \"" + name +
+              "\" is not initialized.");
+        }
+        autogen::print_bridge(trace.bridge);
+        autogen::call_atomic_fun_bridge(trace.bridge, input, output);
         return output;
       });
 

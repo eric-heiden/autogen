@@ -2,8 +2,8 @@
 
 #include "autogen/autogen.hpp"
 
-constexpr double PI = 3.1415926535;
-constexpr double PI_2 = PI / 2.0;
+constexpr double pi = 3.1415926535;
+constexpr double pi_2 = pi / 2.0;
 
 const bool use_reverse_mode = true;
 
@@ -15,9 +15,9 @@ Scalar simple_c(const std::vector<Scalar> &input) {
 template <typename Scalar>
 void simple_b(const std::vector<Scalar> &input, std::vector<Scalar> &output) {
   std::vector<Scalar> temp(3);
-  temp[0] = sin(input[0] * PI + 0.7) * PI_2 * input[1] * input[2];
-  temp[1] = input[1] * (input[2] + PI_2) * PI;
-  temp[2] = input[1] * input[2] * input[2] * input[2] * PI;
+  temp[0] = sin(input[0] * pi + 0.7) * pi_2 * input[1] * input[2];
+  temp[1] = input[1] * (input[2] + pi_2) * pi;
+  temp[2] = input[1] * input[2] * input[2] * input[2] * pi;
   // note we use a special `call_atomic` overload for scalar-valued functions
   std::function functor = &simple_c<Scalar>;
   output[0] = temp[0] + autogen::call_atomic("cosine", functor, temp);
@@ -70,14 +70,14 @@ int main(int argc, char *argv[]) {
   std::vector<double> jacobian;
   std::vector<std::vector<double>> outputs(1);
 
-  gen.set_mode(autogen::GENERATE_NONE);
+  gen.set_mode(autogen::MODE_NUMERICAL);
   std::cout << "### Mode: " << gen.mode() << std::endl;
   gen(input, output);
   print(output);
   gen.jacobian(input, jacobian);
   print(jacobian);
 
-  gen.set_mode(autogen::GENERATE_CPPAD);
+  gen.set_mode(autogen::MODE_CPPAD);
   std::cout << "### Mode: " << gen.mode() << std::endl;
   gen(input, output);
   print(output);
@@ -85,8 +85,9 @@ int main(int argc, char *argv[]) {
   print(jacobian);
 
   try {
-    gen.set_mode(autogen::GENERATE_CUDA);
-    std::cout << "### Mode: " << gen.mode() << std::endl;
+    gen.set_codegen_target(autogen::TARGET_OPENMP);
+    std::cout << "### Mode: " << gen.mode()
+              << "  Target: " << gen.codegen_target() << std::endl;
     gen(input, output);
     print(output);
     gen.jacobian(input, jacobian);
@@ -94,13 +95,33 @@ int main(int argc, char *argv[]) {
   } catch (const std::exception &ex) {
     std::cerr << "Error: " << ex.what() << std::endl;
   }
+  gen.target()->create_cmake_project(input);
 
-  gen.set_mode(autogen::GENERATE_CPU);
-  std::cout << "### Mode: " << gen.mode() << std::endl;
-  gen(input, output);
-  print(output);
-  gen.jacobian(input, jacobian);
-  print(jacobian);
+  try {
+    gen.set_codegen_target(autogen::TARGET_CUDA);
+    std::cout << "### Mode: " << gen.mode()
+              << "  Target: " << gen.codegen_target() << std::endl;
+    gen(input, output);
+    print(output);
+    gen.jacobian(input, jacobian);
+    print(jacobian);
+  } catch (const std::exception &ex) {
+    std::cerr << "Error: " << ex.what() << std::endl;
+  }
+  gen.target()->create_cmake_project(input);
+
+  try {
+    gen.set_codegen_target(autogen::TARGET_LEGACY_C);
+    std::cout << "### Mode: " << gen.mode()
+              << "  Target: " << gen.codegen_target() << std::endl;
+    gen(input, output);
+    print(output);
+    gen.jacobian(input, jacobian);
+    print(jacobian);
+  } catch (const std::exception &ex) {
+    std::cerr << "Error: " << ex.what() << std::endl;
+    throw;
+  }
 
   return EXIT_SUCCESS;
 }

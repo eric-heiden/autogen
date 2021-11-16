@@ -160,5 +160,10 @@ struct FileUtils {
 
     return numBytes;
   }
+
+  static std::string abs_path(const std::string& relative_path) {
+    namespace fs = std::filesystem;
+    return fs::canonical(fs::path(relative_path)).u8string();
+  }
 };
 }  // namespace autogen

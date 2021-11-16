@@ -54,6 +54,7 @@ __scalar_atomics = set()  # names of atomics that return a scalar
 __trace_data = {}
 __trace_order = []
 __TraceData = namedtuple('TraceData', ['function', 'input'])
+__tapes = []
 
 
 def call_atomic(name: str, function, input):
@@ -83,6 +84,7 @@ def __trace_python_atomics():
     """
     Trace the atomic functions implemented in Python.
     """
+    global __tapes
     for name in __trace_order:
         data = __trace_data[name]
         ad_x = ADCGVector([ADCGScalar(x) for x in data.input])
@@ -96,11 +98,17 @@ def __trace_python_atomics():
         else:
             ad_y = ADCGVector([ADCGScalar(y) for y in ys])
         tape = ADCGFun(ad_x, ad_y)
+        # add tape to global list to keep it alive
+        __tapes.append(tape)
         CodeGenData.register_trace(name, tape)
         print(f'Registered trace for atomic function \"{name}\".')
 
 
 def trace(fun, xs, mode: Mode = Mode.CPPAD):
+    global __scalar_atomics
+    global __trace_data
+    global __tapes
+
     set_mode(mode)
 
     Scalar = scalar_type()
@@ -110,6 +118,7 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
         CodeGenData.clear()
         __scalar_atomics.clear()
         __trace_data.clear()
+        __tapes.clear()
 
         print("Dry run...")
         # first, a "dry run" to discover the atomic functions
