@@ -84,7 +84,7 @@ class Target {
 
   virtual bool compile_() {
     throw std::runtime_error(
-        "function \"compile\" has not implemented for target " +
+        "function \"compile\" has not been implemented for target " +
         std::to_string(type_) + ".");
   }
 
@@ -137,19 +137,19 @@ class Target {
 
   virtual bool load_library(const std::string &filename) {
     throw std::runtime_error(
-        "function \"load_library\" has not implemented for target " +
+        "function \"load_library\" has not been implemented for target " +
         std::to_string(type_) + ".");
   }
   virtual bool discard_library() {
     throw std::runtime_error(
-        "function \"discard_library\" has not implemented for target " +
+        "function \"discard_library\" has not been implemented for target " +
         std::to_string(type_) + ".");
   }
 
   virtual void forward(const std::vector<BaseScalar> &input,
                        std::vector<BaseScalar> &output) {
     throw std::runtime_error(
-        "function \"forward\" has not implemented for target " +
+        "function \"forward\" has not been implemented for target " +
         std::to_string(type_) + ".");
   }
 
@@ -157,14 +157,14 @@ class Target {
                        std::vector<std::vector<BaseScalar>> &outputs,
                        const std::vector<BaseScalar> &global_input) {
     throw std::runtime_error(
-        "function \"forward\" has not implemented for target " +
+        "function \"forward\" has not been implemented for target " +
         std::to_string(type_) + ".");
   }
 
   virtual void jacobian(const std::vector<BaseScalar> &input,
                         std::vector<BaseScalar> &output) {
     throw std::runtime_error(
-        "function \"jacobian\" has not implemented for target " +
+        "function \"jacobian\" has not been implemented for target " +
         std::to_string(type_) + ".");
   }
 
@@ -173,7 +173,7 @@ class Target {
       std::vector<std::vector<BaseScalar>> &outputs,
       const std::vector<BaseScalar> &global_input) {
     throw std::runtime_error(
-        "function \"jacobian\" has not implemented for target " +
+        "function \"jacobian\" has not been implemented for target " +
         std::to_string(type_) + ".");
   }
 
@@ -182,7 +182,7 @@ class Target {
       const std::vector<std::vector<BaseScalar>> &local_inputs,
       const std::vector<BaseScalar> &global_input) const {
     throw std::runtime_error(
-        "function \"create_cmake_project\" has not implemented for target" +
+        "function \"create_cmake_project\" has not been implemented for target" +
         std::to_string(type_) + ".");
   }
 
