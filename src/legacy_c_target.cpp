@@ -3,20 +3,6 @@
 #include "autogen/utils/system.h"
 
 namespace autogen {
-// // helper class to get access to the source files from a ModelCSourceGen
-// // instance
-// struct SourceGrabber : public CppAD::cg::ModelCSourceGen<BaseScalar> {
-//   using CppAD::cg::ModelCSourceGen<BaseScalar>::_sources;
-//   SourceGrabber() = default;
-//   SourceGrabber(const CppAD::cg::ModelCSourceGen<BaseScalar> &source_gen) {
-//     _sources = source_gen._sources;
-//   }
-
-//   const std::map<std::string, std::string> &getSources() const {
-//     return _sources;
-//   }
-// };
-
 void LegacyCTarget::forward(const std::vector<BaseScalar> &input,
                             std::vector<BaseScalar> &output) {
   assert(!library_name_.empty());
