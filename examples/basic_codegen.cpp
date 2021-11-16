@@ -84,33 +84,33 @@ int main(int argc, char *argv[]) {
   gen.jacobian(input, jacobian);
   print(jacobian);
 
-  // try {
-  //   gen.set_codegen_target(autogen::TARGET_OPENMP);
-  //   std::cout << "### Mode: " << gen.mode()
-  //             << "  Target: " << gen.codegen_target() << std::endl;
-  //   gen(input, output);
-  //   print(output);
-  //   gen.jacobian(input, jacobian);
-  //   print(jacobian);
-  // } catch (const std::exception &ex) {
-  //   std::cerr << "Error: " << ex.what() << std::endl;
-  // }
-  // gen.target()->create_cmake_project(input);
+  try {
+    gen.set_codegen_target(autogen::TARGET_OPENMP);
+    std::cout << "### Mode: " << gen.mode()
+              << "  Target: " << gen.codegen_target() << std::endl;
+    gen(input, output);
+    print(output);
+    gen.jacobian(input, jacobian);
+    print(jacobian);
+  } catch (const std::exception &ex) {
+    std::cerr << "Error: " << ex.what() << std::endl;
+  }
+  gen.target()->create_cmake_project(input);
 
-  // try {
-  //   gen.set_codegen_target(autogen::TARGET_CUDA);
-  //   std::cout << "### Mode: " << gen.mode()
-  //             << "  Target: " << gen.codegen_target() << std::endl;
-  //   gen(input, output);
-  //   print(output);
-  //   gen.jacobian(input, jacobian);
-  //   print(jacobian);
-  // } catch (const std::exception &ex) {
-  //   std::cerr << "Error: " << ex.what() << std::endl;
-  // }
-  // gen.target()->create_cmake_project(input);
+  try {
+    gen.set_codegen_target(autogen::TARGET_CUDA);
+    std::cout << "### Mode: " << gen.mode()
+              << "  Target: " << gen.codegen_target() << std::endl;
+    gen(input, output);
+    print(output);
+    gen.jacobian(input, jacobian);
+    print(jacobian);
+  } catch (const std::exception &ex) {
+    std::cerr << "Error: " << ex.what() << std::endl;
+  }
+  gen.target()->create_cmake_project(input);
 
-  // try {
+  try {
     gen.set_codegen_target(autogen::TARGET_LEGACY_C);
     std::cout << "### Mode: " << gen.mode()
               << "  Target: " << gen.codegen_target() << std::endl;
@@ -118,11 +118,10 @@ int main(int argc, char *argv[]) {
     print(output);
     gen.jacobian(input, jacobian);
     print(jacobian);
-  // } catch (const std::exception &ex) {
-  //   std::cerr << "Error: " << ex.what() << std::endl;
-  //   throw;
-  // }
-  gen.target()->create_cmake_project(input);
+  } catch (const std::exception &ex) {
+    std::cerr << "Error: " << ex.what() << std::endl;
+    throw;
+  }
 
   return EXIT_SUCCESS;
 }
