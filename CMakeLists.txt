@@ -80,3 +80,4 @@ if (Eigen_FOUND)
 endif (Eigen_FOUND)
 
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/examples)
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/test)

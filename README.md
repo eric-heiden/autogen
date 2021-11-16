@@ -1,5 +1,6 @@
 # autogen
 [![autogen-docs](https://github.com/eric-heiden/autogen/actions/workflows/ci.yml/badge.svg)](https://github.com/eric-heiden/autogen/actions/workflows/ci.yml)
+[![ubuntu-latest](https://github.com/eric-heiden/autogen/actions/workflows/cmake.yml/badge.svg)](https://github.com/eric-heiden/autogen/actions/workflows/cmake.yml)
 
 Code generation for automatic differentiation with GPU support.
 
