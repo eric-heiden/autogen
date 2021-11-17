@@ -1,9 +1,12 @@
 from typing import Callable
 from collections import namedtuple
+import os
+import platform
 from _autogen import *
 
 init_shared_data()
 # print("initialized shared data")
+
 
 def scalar_type():
     """
@@ -53,7 +56,7 @@ def vector(xs):
 __scalar_atomics = set()  # names of atomics that return a scalar
 __trace_data = {}
 __trace_order = []
-__TraceData = namedtuple('TraceData', ['function', 'input'])
+__TraceData = namedtuple("TraceData", ["function", "input"])
 __tapes = []
 
 
@@ -61,7 +64,7 @@ def call_atomic(name: str, function, input):
     global __scalar_atomics
     global __trace_data
     global __trace_order
-    
+
     if get_mode() != Mode.CODEGEN:
         return function(input)
 
@@ -72,7 +75,7 @@ def call_atomic(name: str, function, input):
             raw_input = [to_double(x) for x in input]
             __trace_data[name] = __TraceData(function, raw_input)
             return function(input)
-        
+
         return function(input)
 
     if name in __scalar_atomics:
@@ -90,8 +93,8 @@ def __trace_python_atomics():
         ad_x = ADCGVector([ADCGScalar(x) for x in data.input])
         independent(ad_x)
         ys = data.function(ad_x)
-        if isinstance(ys, ADCGScalar):  
-            # this atomic function only returns a scalar          
+        if isinstance(ys, ADCGScalar):
+            # this atomic function only returns a scalar
             ad_y = ADCGVector([ys])
             __scalar_atomics.add(name)
             ys = ADCGVector([ys])
@@ -101,7 +104,7 @@ def __trace_python_atomics():
         # add tape to global list to keep it alive
         __tapes.append(tape)
         CodeGenData.register_trace(name, tape)
-        print(f'Registered trace for atomic function \"{name}\".')
+        print(f'Registered trace for atomic function "{name}".')
 
 
 def trace(fun, xs, mode: Mode = Mode.CPPAD):
@@ -130,8 +133,11 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
 
         CodeGenData.set_dry_run(False)
 
-        print('The following atomic functions were discovered: [%s]' % ', '.join(CodeGenData.invocation_order))
-    
+        print(
+            "The following atomic functions were discovered: [%s]"
+            % ", ".join(CodeGenData.invocation_order)
+        )
+
         # trace existing atomics from some non-Python code
         CodeGenData.trace_existing_atomics()
         # trace atomics in Python code
@@ -149,6 +155,34 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
     if mode == Mode.CPPAD:
         return ADFun(ad_x, ad_y)
     return ADCGFun(ad_x, ad_y)
+
+
+def init_vsvars():
+    # https://stackoverflow.com/a/57883682
+    vswhere_path = r"%ProgramFiles(x86)%/Microsoft Visual Studio/Installer/vswhere.exe"
+    vswhere_path = os.path.expandvars(vswhere_path)
+    if not os.path.exists(vswhere_path):
+        raise EnvironmentError("vswhere.exe not found at: %s", vswhere_path)
+
+    vs_path = (
+        os.popen('"{}" -latest -property installationPath'.format(vswhere_path))
+        .read()
+        .rstrip()
+    )
+    vsvars_path = os.path.join(vs_path, "VC\\Auxiliary\\Build\\vcvars64.bat")
+    output = os.popen('"{}" && set'.format(vsvars_path)).read()
+    assignments = output.splitlines()
+    for line in assignments:
+        pair = line.split("=", 1)
+        if len(pair) >= 2:
+            os.environ[pair[0]] = pair[1]
+    print(
+        f'Loaded {len(assignments)} build environment variables from "{vsvars_path}".'
+    )
+
+
+if "windows" in platform.system().lower():
+    init_vsvars()
 
 
 class Generated:
