@@ -203,29 +203,32 @@ PYBIND11_MODULE(_autogen, m) {
            [](std::shared_ptr<ADCGFun>& fun) { return fun->optimize(); });
 
   m.def("independent", [](ADCGVector& x) {
+    std::cout << "Independent()\n";
     CppAD::Independent(x);
     // XXX save tape table for thread 0
-    py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
-    py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
-    py::set_shared_data("atomic_index_infos", CppAD::local::atomic_index_infos);
-    py::set_shared_data("traces", CodeGenData::traces);
-    py::set_shared_data("is_dry_run", &CodeGenData::is_dry_run);
-    py::set_shared_data("call_hierarchy", &CodeGenData::call_hierarchy);
+    // py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
+    // py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
+    // py::set_shared_data("atomic_index_infos", ADCGScalar::atomic_index_infos);
+    // py::set_shared_data("codegen_data", CodeGenData::instance);
+    // py::set_shared_data("is_dry_run", &CodeGenData::is_dry_run);
+    // py::set_shared_data("call_hierarchy", &CodeGenData::call_hierarchy);
 
-    py::set_shared_data("invocation_order", CodeGenData::invocation_order);
-    std::cout << "ADCG Atomic index infos has "
-              << CppAD::local::atomic_index_infos->size() << " entries.\n";
+    // py::set_shared_data("invocation_order", CodeGenData::invocation_order);
+    std::cout << "\tADCG Atomic index infos ("
+              << ADCGScalar::atomic_index_infos << ") has "
+              << ADCGScalar::atomic_index_infos->size() << " entries.\n";
   });
 
   m.def("init_shared_data", []() {
-    py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
-    py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
-    py::set_shared_data("atomic_index_infos", CppAD::local::atomic_index_infos);
-    py::set_shared_data("traces", CodeGenData::traces);
-    py::set_shared_data("is_dry_run", &CodeGenData::is_dry_run);
-    py::set_shared_data("call_hierarchy", &CodeGenData::call_hierarchy);
+    set_shared_data();
+  });
 
-    py::set_shared_data("invocation_order", CodeGenData::invocation_order);
+  m.def("retrieve_tape", []() {
+    if (get_scope()->mode == MODE_CPPAD) {
+      retrieve_tape<ADScalar>();
+    } else if (get_scope()->mode == MODE_CODEGEN) {
+      retrieve_tape<ADCGScalar>();
+    }
   });
 
   py::class_<autogen::GeneratedCppAD>(m, "GeneratedCppAD")
@@ -445,17 +448,17 @@ PYBIND11_MODULE(_autogen, m) {
       .def_static("clear", &CodeGenData::clear)
       .def_static("has_trace",
                   [](const std::string& name) {
-                    return CodeGenData::traces->find(name) !=
-                           CodeGenData::traces->end();
+                    return CodeGenData::traces().find(name) !=
+                           CodeGenData::traces().end();
                   })
       .def_static("update_call_hierarchy",
                   [](const std::string& name) {
-                    auto& order = *CodeGenData::invocation_order;
+                    auto& order = CodeGenData::invocation_order();
                     if (!order.empty()) {
                       // the current function is called by another function,
                       // hence update the call hierarchy
                       const std::string& parent = order.back();
-                      auto& hierarchy = CodeGenData::call_hierarchy;
+                      auto& hierarchy = CodeGenData::call_hierarchy();
                       if (hierarchy.find(parent) == hierarchy.end()) {
                         hierarchy[parent] = std::vector<std::string>();
                       }
@@ -463,23 +466,28 @@ PYBIND11_MODULE(_autogen, m) {
                     }
                     order.push_back(name);
                   })
-      .def_static("is_dry_run", []() { return CodeGenData::is_dry_run; })
+      .def_static("is_dry_run", &CodeGenData::is_dry_run)
       .def_static("set_dry_run",
                   [](bool dry_run) {
-                    CodeGenData::is_dry_run = dry_run;
-                    // std::cout << "Setting dry run to " << std::boolalpha
-                    //           << CodeGenData::is_dry_run << "\n";
+                    // if (get_scope()->mode == MODE_CPPAD) {
+                    //   retrieve_tape<ADScalar>();
+                    // } else if (get_scope()->mode == MODE_CODEGEN) {
+                    //   retrieve_tape<ADCGScalar>();
+                    // }
+                    CodeGenData::is_dry_run() = dry_run;
+                    std::cout << "Setting dry run to " << std::boolalpha
+                              << CodeGenData::is_dry_run() << "\n";
                   })
-      .def_readwrite_static("invocation_order", &CodeGenData::invocation_order)
-      .def_readwrite_static("call_hierarchy", &CodeGenData::call_hierarchy)
+      .def_static("invocation_order", &CodeGenData::invocation_order)
+      .def_static("call_hierarchy", &CodeGenData::call_hierarchy)
       .def_static("register_trace",
                   [](const std::string& name, std::shared_ptr<ADCGFun> tape) {
-                    if (get_scope()->mode == MODE_CPPAD) {
-                      retrieve_tape<ADScalar>();
-                    } else if (get_scope()->mode == MODE_CODEGEN) {
-                      retrieve_tape<ADCGScalar>();
-                    }
-                    FunctionTrace& trace = (*CodeGenData::traces)[name];
+                    // if (get_scope()->mode == MODE_CPPAD) {
+                    //   retrieve_tape<ADScalar>();
+                    // } else if (get_scope()->mode == MODE_CODEGEN) {
+                    //   retrieve_tape<ADCGScalar>();
+                    // }
+                    FunctionTrace& trace = CodeGenData::traces()[name];
                     std::cout << "Adding trace for atomic function \"" << name
                               << "\"...\n";
                     trace.tape = tape.get();
@@ -490,21 +498,26 @@ PYBIND11_MODULE(_autogen, m) {
                   })
       .def_static("trace_existing_atomics",
                   []() {
-                    if (get_scope()->mode == MODE_CPPAD) {
-                      retrieve_tape<ADScalar>();
-                    } else if (get_scope()->mode == MODE_CODEGEN) {
-                      retrieve_tape<ADCGScalar>();
-                    }
+                    // if (get_scope()->mode == MODE_CPPAD) {
+                    //   retrieve_tape<ADScalar>();
+                    // } else if (get_scope()->mode == MODE_CODEGEN) {
+                    //   retrieve_tape<ADCGScalar>();
+                    // }
                     trace_existing_atomics();
                   })
       .def_static("call_bridge", [](const std::string& name,
                                     const ADCGVector& input) {
-        if (CodeGenData::traces->find(name) == CodeGenData::traces->end()) {
+        if (CodeGenData::traces().find(name) == CodeGenData::traces().end()) {
           throw std::runtime_error("Could not find trace with name \"" + name +
                                    "\" while attempting to call the "
                                    "corresponding function bridge.");
         }
-        FunctionTrace& trace = (*CodeGenData::traces)[name];
+        // if (get_scope()->mode == MODE_CPPAD) {
+        //   retrieve_tape<ADScalar>();
+        // } else if (get_scope()->mode == MODE_CODEGEN) {
+        //   retrieve_tape<ADCGScalar>();
+        // }
+        FunctionTrace& trace = CodeGenData::traces()[name];
         ADCGVector output(trace.output_dim);
         if (trace.bridge == nullptr) {
           throw std::runtime_error(
