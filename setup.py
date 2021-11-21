@@ -11,12 +11,14 @@ if platform.system() in ("Linux", "Darwin"):
     extra_link_args = ['-lgomp']
     if debug_mode:
         extra_link_args.append('-g')
+        extra_compile_args.append('-O0')
 else:
     extra_compile_args = ["/openmp"]
     extra_link_args = []
     if debug_mode:
         extra_compile_args.append('/DEBUG:FULL')
         extra_compile_args.append('/Od')
+        extra_compile_args.append('/w')
         extra_link_args.append('/DEBUG:FULL')
 
 ext_modules = [

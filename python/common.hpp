@@ -11,8 +11,10 @@
 namespace py = pybind11;
 using namespace autogen;
 
+#ifdef PYBIND11_NUMPY_OBJECT_DTYPE
 PYBIND11_NUMPY_OBJECT_DTYPE(ADScalar);
 PYBIND11_NUMPY_OBJECT_DTYPE(ADCGScalar);
+#endif
 
 struct Scope {
   GenerationMode mode{MODE_NUMERICAL};
@@ -90,7 +92,7 @@ void retrieve_tape<ADScalar>() {
   // std::cout << "Retrieving ADScalar tape table...\n";
   ADScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<double>*>(
       py::get_shared_data("tape_table_ad"));
-  // CppAD::local::atomic_index_infos =
+  // ADCGScalar::atomic_index_infos =
   //    std::shared_ptr<std::vector<CppAD::local::atomic_index_info>>(
   //    reinterpret_cast<std::vector<CppAD::local::atomic_index_info>*>(
   //         py::get_shared_data("atomic_index_infos_ad")));
@@ -106,12 +108,12 @@ void retrieve_tape<ADScalar>() {
   //     reinterpret_cast<std::vector<std::string>*>(
   //         py::get_shared_data("invocation_order"));
   // std::cout << "AD restored Atomic index infos has "
-  //           << CppAD::local::atomic_index_infos->size() << " entries.\n";
+  //           << ADCGScalar::atomic_index_infos->size() << " entries.\n";
 }
 
 void print_invocation_order() {
   std::cout << "Invocation order: ";
-  for (const auto& s : *autogen::CodeGenData::invocation_order) {
+  for (const auto& s : autogen::CodeGenData::invocation_order()) {
     std::cout << s << " ";
   }
   std::cout << std::endl;
@@ -130,23 +132,28 @@ void retrieve_shared_ptr(T** target, const std::string& name) {
 
 template <>
 void retrieve_tape<ADCGScalar>() {
-  // std::cout << "before retrieving tape ADCG restored Atomic index infos has "
-  //           << CppAD::local::atomic_index_infos->size() << " entries.\n";
-  // std::cout << "Retrieving ADCGScalar tape table...\n";
-  ADCGScalar::tape_table[0] = reinterpret_cast<CppAD::local::ADTape<CGScalar>*>(
+  std::cout << "before retrieving tape ADCG restored Atomic index infos ("
+            << ADCGScalar::atomic_index_infos << ") has "
+            << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+  std::cout << "Retrieving ADCGScalar tape table...\n";
+  ADCGScalar::tape_table = reinterpret_cast<CppAD::local::ADTape<CGScalar>**>(
       py::get_shared_data("tape_table_adcg"));
   ADCGScalar::tape_id_table =
       reinterpret_cast<CppAD::tape_id_t*>(py::get_shared_data("tape_id_table"));
-  retrieve_shared_ptr(&CppAD::local::atomic_index_infos, "atomic_index_infos");
-  // CppAD::local::atomic_index_infos =
-  //     std::shared_ptr<std::vector<CppAD::local::atomic_index_info>>(reinterpret_cast<std::vector<CppAD::local::atomic_index_info>*>(
-  //         py::get_shared_data("atomic_index_infos_adcg")));
+  retrieve_shared_ptr(&ADCGScalar::atomic_index_infos, "atomic_index_infos");
   // autogen::CodeGenData::traces = reinterpret_cast<
   //     std::map<std::string, autogen::FunctionTrace<autogen::BaseScalar>>*>(
   //     py::get_shared_data("traces"));
-  retrieve_shared_ptr(&autogen::CodeGenData::traces, "traces");
-  autogen::CodeGenData::is_dry_run =
-      *reinterpret_cast<bool*>(py::get_shared_data("is_dry_run"));
+  retrieve_shared_ptr(&autogen::CodeGenData::instance, "codegen_data");
+
+
+  CppAD::thread_alloc::all_info = reinterpret_cast<CppAD::thread_alloc::thread_alloc_info**>(
+      py::get_shared_data("thread_alloc_all_info"));
+  CppAD::thread_alloc::zero_info = reinterpret_cast<CppAD::thread_alloc::thread_alloc_info*>(
+      py::get_shared_data("thread_alloc_zero_info"));
+
+  // autogen::CodeGenData::is_dry_run =
+  //     *reinterpret_cast<bool*>(py::get_shared_data("is_dry_run"));
   // autogen::CodeGenData::call_hierarchy =
   //     *reinterpret_cast<std::map<std::string, std::vector<std::string>>*>(
   //         py::get_shared_data("call_hierarchy"));
@@ -155,13 +162,35 @@ void retrieve_tape<ADCGScalar>() {
   // autogen::CodeGenData::invocation_order =
   //     reinterpret_cast<std::vector<std::string>*>(
   //         py::get_shared_data("invocation_order"));
-  retrieve_shared_ptr(&autogen::CodeGenData::invocation_order,
-                      "invocation_order");
+  // retrieve_shared_ptr(&autogen::CodeGenData::invocation_order,
+  //                     "invocation_order");
 
-  // std::cout << "after retrieved tape data:  ";
-  // print_invocation_order();
-  // std::cout << "ADCG restored Atomic index infos has "
-  //           << CppAD::local::atomic_index_infos->size() << " entries.\n";
+  std::cout << "after retrieved tape data:  ";
+  print_invocation_order();
+  std::cout << "ADCG restored Atomic index at "
+            << ADCGScalar::atomic_index_infos << " infos has "
+            << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+  std::cout << "Retrieved codegen_data ptr: " << autogen::CodeGenData::instance
+            << std::endl;
+}
+
+void set_shared_data() {
+  ADCGScalar::atomic_index_infos =
+      new std::vector<CppAD::local::atomic_index_info>;
+  py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table);
+  py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
+  py::set_shared_data("atomic_index_infos", ADCGScalar::atomic_index_infos);
+  CodeGenData::create();
+  py::set_shared_data("codegen_data", CodeGenData::instance);
+  py::set_shared_data("thread_alloc_all_info", CppAD::thread_alloc::all_info);
+  py::set_shared_data("thread_alloc_zero_info", CppAD::thread_alloc::zero_info);
+  // py::set_shared_data("is_dry_run", &CodeGenData::is_dry_run);
+  // py::set_shared_data("call_hierarchy", &CodeGenData::call_hierarchy);
+
+  // py::set_shared_data("invocation_order", CodeGenData::invocation_order);
+  std::cout << "ADCGScalar::atomic_index_infos  ptr: "
+            << ADCGScalar::atomic_index_infos << std::endl;
+  std::cout << "codegen_data  ptr: " << CodeGenData::instance << std::endl;
 }
 
 template <>
@@ -200,13 +229,13 @@ struct publish_function {
     });
 
     m.def(name, [this, name](const ADScalar& x) {
-      retrieve_tape<ADScalar>();
+      // retrieve_tape<ADScalar>();
       // std::cout << "Calling CppAD " << name << " with x = " << x << "\n";
       return functor_ad(x);
     });
 
     m.def(name, [this, name](const ADCGScalar& x) {
-      retrieve_tape<ADCGScalar>();
+      // retrieve_tape<ADCGScalar>();
       // std::cout << "Calling CodeGen " << name << " with x = " << x << "\n";
       return functor_cg(x);
     });
@@ -237,7 +266,7 @@ struct publish_vec_function {
     m.def(
         name,
         [this, name](const std::vector<ADScalar>& x) -> std::vector<ADScalar> {
-          retrieve_tape<ADScalar>();
+          // retrieve_tape<ADScalar>();
           // std::cout << "Calling CppAD " << name << "\n";
           try {
             std::vector<ADScalar> output;
@@ -253,7 +282,7 @@ struct publish_vec_function {
     m.def(name,
           [this,
            name](const std::vector<ADCGScalar>& x) -> std::vector<ADCGScalar> {
-            retrieve_tape<ADCGScalar>();
+            // retrieve_tape<ADCGScalar>();
             // std::cout << "Calling CodeGen " << name << "\n";
             try {
               std::vector<ADCGScalar> output;

@@ -11,8 +11,9 @@ namespace autogen {
 CppAD::cg::CGAtomicFunBridge<BaseScalar>* create_atomic_fun_bridge(
     const std::string& name, CppAD::ADFun<CppAD::cg::CG<BaseScalar>>& fun,
     bool standAlone, bool cacheSparsities) {
-  return new CppAD::cg::CGAtomicFunBridge<BaseScalar>(name, fun, standAlone,
-                                                      cacheSparsities);
+  auto* bridge = new CppAD::cg::CGAtomicFunBridge<BaseScalar>(
+      name, fun, standAlone, cacheSparsities);
+  return bridge;
 }
 
 void call_atomic_fun_bridge(
@@ -23,7 +24,7 @@ void call_atomic_fun_bridge(
 }
 
 void print_bridge(CppAD::cg::CGAtomicFunBridge<BaseScalar>* bridge) {
-  std::cout << "Calling bridge \"" << bridge->atomic_name()
-            << "\" (ID: " << bridge->getId() << ")" << std::endl;
+  std::cout << "Calling bridge " << bridge << " (\"" << bridge->atomic_name()
+            << "\") (ID: " << bridge->getId() << ")" << std::endl;
 }
 }  // namespace autogen

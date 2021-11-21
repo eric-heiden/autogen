@@ -126,8 +126,9 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
         print("Dry run...")
         # first, a "dry run" to discover the atomic functions
         CodeGenData.set_dry_run(True)
+        retrieve_tape()
 
-        ad_x = Vector([Scalar(x) for x in xs])
+        ad_x = Vector([Scalar(to_double(x)) for x in xs])
         # independent(ad_x)
         ys = fun(ad_x)
 
@@ -135,7 +136,7 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
 
         print(
             "The following atomic functions were discovered: [%s]"
-            % ", ".join(CodeGenData.invocation_order)
+            % ", ".join(CodeGenData.invocation_order())
         )
 
         # trace existing atomics from some non-Python code
@@ -145,11 +146,11 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
 
         print("Final run...")
     # trace top-level function where the CGAtomicFunBridges are used
-    ad_x = Vector([Scalar(x) for x in xs])
+    ad_x = Vector([Scalar(to_double(x)) for x in xs])
     independent(ad_x)
     ys = fun(ad_x)
-
-    ad_y = Vector([Scalar(y) for y in ys])
+    ad_y = Vector(ys)
+    # ad_y = Vector([Scalar(y) for y in ys])
     if mode == Mode.DOUBLE:
         raise NotImplementedError("finite diff functor not yet implemented")
     if mode == Mode.CPPAD:

@@ -183,11 +183,11 @@ bool LegacyCTarget::generate_code_() {
 
   // reverse order of invocation to first generate code for innermost
   // functions
-  const auto &order = *CodeGenData::invocation_order;
+  const auto &order = CodeGenData::invocation_order();
   models_.clear();
   models_.push_back(main_source_gen);
   for (auto it = order.rbegin(); it != order.rend(); ++it) {
-    FunctionTrace &trace = (*CodeGenData::traces)[*it];
+    FunctionTrace &trace = CodeGenData::traces()[*it];
     // trace.tape->optimize();
     auto *source_gen = new ModelCSourceGen<BaseScalar>(*(trace.tape), *it);
     source_gen->setCreateForwardZero(generate_forward_);

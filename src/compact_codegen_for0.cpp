@@ -45,8 +45,8 @@ std::string CompactCodeGen::forward_zero_source() {
      */
     dep = model_source_gen_->prepareForward0WithLoops(handler, indVars);
   }
+  
   model_source_gen_->setZeroEvaluated(true);
-
   model_source_gen_->finishedJob();
 
   LanguageCompact langC;
