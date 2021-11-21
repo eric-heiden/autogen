@@ -38,7 +38,7 @@ struct CompactTarget : public Target {
     }
     bool is_function_only = false;
     codegen_ = std::make_unique<CodeGen>(name(), is_function_only);
-    codegen_->set_tape(*main_trace().tape);
+    codegen_->set_tape(main_trace().tape);
   }
 
   virtual bool generate_code_();

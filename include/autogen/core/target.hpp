@@ -114,6 +114,10 @@ class Target {
     return sources_;
   }
 
+  virtual std::string canonical_name() const {
+    return name() + "_" + std::to_string(type_);
+  }
+
   bool generate_code() {
     sources_.clear();
     source_filenames_.clear();

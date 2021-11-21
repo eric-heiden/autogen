@@ -292,7 +292,7 @@ bool OpenMpTarget::compile_() {
     //     this->modelLibraryHelper_->getCustomSources();
     // compiler_->compileSources(customSource, true, this->modelLibraryHelper_);
 
-    library_name_ = "./" + name() + "_" + std::to_string(type_);
+    library_name_ = source_folder_prefix_ + this->canonical_name();
     std::string libname = library_name_;
     libname += system::SystemInfo<>::DYNAMIC_LIB_EXTENSION;
 

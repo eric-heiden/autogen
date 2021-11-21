@@ -55,10 +55,10 @@ class CompactCodeGen {
 
   virtual ~CompactCodeGen() = default;
 
-  virtual void set_tape(CppAD::ADFun<CGBase> &fun) {
-    fun_ = &fun;
+  virtual void set_tape(CppAD::ADFun<CGBase> *fun) {
+    fun_ = fun;
     model_source_gen_ =
-        std::make_shared<CompactModelSourceGen>(fun, model_name_);
+        std::make_shared<CompactModelSourceGen>(*fun, model_name_);
   }
 
   size_t input_dim() const {
