@@ -22,4 +22,7 @@ inline bool directory_exists(const std::string &dirname) {
 // returns the absolute path of the executable
 inline std::string find_exe(const std::string &name,
                             bool throw_exception_on_error = true);
+
+// load MSVC variables
+void load_windows_build_variables();
 }  // namespace autogen

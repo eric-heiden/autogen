@@ -210,16 +210,16 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
 #endif
 
   FunctionTrace &trace = traces[name];
-  std::cout << "\tTrace bridge: " << trace.bridge << std::endl;
+  // std::cout << "\tTrace bridge: " << trace.bridge << std::endl;
   if (!trace.bridge) {
     throw std::runtime_error(
         "CGAtomicFunBridge for atomic function \"" + name +
         "\" is missing. Make sure to call `trace_existing_atomics()`.");
   }
-  std::cout << "call_atomic_fun_bridge(trace.bridge, input, output)\n";
+  // std::cout << "call_atomic_fun_bridge(trace.bridge, input, output)\n";
   call_atomic_fun_bridge(trace.bridge, input, output);
   // (*(trace.bridge))(input, output);
-  std::cout << "Done call_atomic_fun_bridge" << std::endl;
+  // std::cout << "Done call_atomic_fun_bridge" << std::endl;
 
   // std::cout << "Invocation order: ";
   // for (const auto &s : *CodeGenData::invocation_order()) {
@@ -264,12 +264,13 @@ inline void trace_existing_atomics() {
     trace.ax = ax;
     trace.ay = ay;
     trace.tape->function_name_set(trace.name);
-    // std::cout << "\tTape \"" << trace.name << "\" has " << trace.tape->size_op()
+    // std::cout << "\tTape \"" << trace.name << "\" has " <<
+    // trace.tape->size_op()
     //           << " operator(s) in the operation sequence.\n";
 
     // {
-    //   std::cout << "\t\tTesting \"" << trace.name << "\" tape code with input:";
-    //   typedef CppAD::cg::CG<BaseScalar> CGScalar;
+    //   std::cout << "\t\tTesting \"" << trace.name << "\" tape code with
+    //   input:"; typedef CppAD::cg::CG<BaseScalar> CGScalar;
     //   std::vector<CGScalar> indVars(trace.input_dim);
     //   // const auto& x = model_source_gen_->getTypicalIndependentValues();
     //   // if (x.size() > 0) {
@@ -318,7 +319,7 @@ inline void trace_existing_atomics() {
 
     trace.bridge = create_atomic_fun_bridge(trace.name, *(trace.tape), true);
   }
-  std::cout << "### Done tracing existing atomics in C++\n\n\n";
+  // std::cout << "### Done tracing existing atomics in C++\n\n\n";
 }
 
 template <typename Functor>

@@ -5,7 +5,7 @@
 namespace autogen {
 void OpenMpCodeGen::emit_kernel_launch(std::ostringstream &code,
                                        const std::string &function_name,
-                                       size_t local_input_dim, 
+                                       size_t local_input_dim,
                                        size_t global_input_dim,
                                        size_t output_dim) const {
   std::string fun_head_start = "MODULE_API void " + function_name + "(";
@@ -58,8 +58,8 @@ void OpenMpCodeGen::emit_kernel_launch(std::ostringstream &code,
   } else {
     code << "  for (int i = 0; i < num_total_threads; ++i) {\n";
     code << "    for (int j = 0; j < " << output_dim << "; ++j) {\n";
-    code << "      output[j] = " << outvar << "[i * " << output_dim
-         << " + j];\n";
+    code << "      output[i * " << output_dim << " + j] = " << outvar << "[i * "
+         << output_dim << " + j];\n";
     code << "    }\n";
     code << "  }\n";
   }

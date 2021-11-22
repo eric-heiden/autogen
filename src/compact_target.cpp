@@ -194,7 +194,7 @@ bool CompactTarget<CodeGenT, LibFunctionT>::create_cmake_project(
   main_code << "  const int num_threads = " << local_inputs.size() << ";\n";
   main_code << "  // initialize local inputs\n";
   main_code << "  Float local_inputs["
-            << local_inputs.size() * local_inputs[0].size() << "] = {\n    ";
+            << local_inputs[0].size() << " * num_threads] = {\n    ";
   for (std::size_t i = 0; i < local_inputs.size(); ++i) {
     for (std::size_t j = 0; j < local_inputs[i].size(); ++j) {
       main_code << local_inputs[i][j];

@@ -182,8 +182,8 @@ def init_vsvars():
     )
 
 
-if "windows" in platform.system().lower():
-    init_vsvars()
+# if "windows" in platform.system().lower():
+#     init_vsvars()
 
 
 class Generated:

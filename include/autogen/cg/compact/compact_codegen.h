@@ -15,7 +15,7 @@ class CompactCodeGen {
  protected:
   size_t global_input_dim_{0};
 
-  AccumulationMethod jac_acc_method_{ACCUMULATE_MEAN};
+  AccumulationMethod jac_acc_method_{ACCUMULATE_NONE};
 
   std::vector<size_t> jac_local_input_sparsity_;
   std::vector<size_t> jac_global_input_sparsity_;

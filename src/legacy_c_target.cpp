@@ -263,7 +263,7 @@ bool LegacyCTarget::compile_() {
     // const std::map<std::string, CppAD::cg::ModelCSourceGen<BaseScalar> *>
     //     &models = libcgen_->getModels();
     auto mt_type = CppAD::cg::MultiThreadingType::NONE;
-    for (const auto* model : models_) {
+    for (const auto *model : models_) {
       const std::map<std::string, std::string> &modelSources =
           model->getSources();
 
@@ -276,8 +276,8 @@ bool LegacyCTarget::compile_() {
     //     this->getLibrarySources();
     compiler_->compileSources(source_files, true, timer);
 
-    library_name_ =
-        source_folder_prefix_ + name() + "_" + std::to_string(type_);
+    library_name_ = std::filesystem::absolute(source_folder_prefix_).string() +
+                    this->canonical_name();
     std::string libname = library_name_ + library_ext_;
 
     compiler_->buildDynamic(libname, timer);
