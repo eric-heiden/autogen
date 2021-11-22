@@ -131,7 +131,8 @@ class Target {
     return generate_code_();
   }
 
-  bool compile() {
+  bool compile() {    
+    autogen::load_windows_build_variables();
     if (!compile_()) {
       return false;
     }
