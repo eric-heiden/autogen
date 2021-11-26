@@ -203,25 +203,27 @@ PYBIND11_MODULE(_autogen, m) {
            [](std::shared_ptr<ADCGFun>& fun) { return fun->optimize(); });
 
   m.def("independent", [](ADCGVector& x) {
+#ifdef DEBUG
     std::cout << "Independent()\n";
+#endif
     CppAD::Independent(x);
-    // XXX save tape table for thread 0
-    // py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
-    // py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
-    // py::set_shared_data("atomic_index_infos", ADCGScalar::atomic_index_infos);
-    // py::set_shared_data("codegen_data", CodeGenData::instance);
-    // py::set_shared_data("is_dry_run", &CodeGenData::is_dry_run);
-    // py::set_shared_data("call_hierarchy", &CodeGenData::call_hierarchy);
+// XXX save tape table for thread 0
+// py::set_shared_data("tape_table_adcg", ADCGScalar::tape_table[0]);
+// py::set_shared_data("tape_id_table", ADCGScalar::tape_id_table);
+// py::set_shared_data("atomic_index_infos", ADCGScalar::atomic_index_infos);
+// py::set_shared_data("codegen_data", CodeGenData::instance);
+// py::set_shared_data("is_dry_run", &CodeGenData::is_dry_run);
+// py::set_shared_data("call_hierarchy", &CodeGenData::call_hierarchy);
 
-    // py::set_shared_data("invocation_order", CodeGenData::invocation_order);
-    std::cout << "\tADCG Atomic index infos ("
-              << ADCGScalar::atomic_index_infos << ") has "
-              << ADCGScalar::atomic_index_infos->size() << " entries.\n";
+// py::set_shared_data("invocation_order", CodeGenData::invocation_order);
+#ifdef DEBUG
+    std::cout << "\tADCG Atomic index infos (" << ADCGScalar::atomic_index_infos
+              << ") has " << ADCGScalar::atomic_index_infos->size()
+              << " entries.\n";
+#endif
   });
 
-  m.def("init_shared_data", []() {
-    set_shared_data();
-  });
+  m.def("init_shared_data", []() { set_shared_data(); });
 
   m.def("retrieve_tape", []() {
     if (get_scope()->mode == MODE_CPPAD) {
@@ -446,11 +448,7 @@ PYBIND11_MODULE(_autogen, m) {
 
   py::class_<CodeGenData>(m, "CodeGenData")
       .def_static("clear", &CodeGenData::clear)
-      .def_static("has_trace",
-                  [](const std::string& name) {
-                    return CodeGenData::traces().find(name) !=
-                           CodeGenData::traces().end();
-                  })
+      .def_static("has_trace", &CodeGenData::has_trace)
       .def_static("update_call_hierarchy",
                   [](const std::string& name) {
                     auto& order = CodeGenData::invocation_order();
@@ -475,8 +473,8 @@ PYBIND11_MODULE(_autogen, m) {
                     //   retrieve_tape<ADCGScalar>();
                     // }
                     CodeGenData::is_dry_run() = dry_run;
-                    std::cout << "Setting dry run to " << std::boolalpha
-                              << CodeGenData::is_dry_run() << "\n";
+                    // std::cout << "Setting dry run to " << std::boolalpha
+                    //           << CodeGenData::is_dry_run() << "\n";
                   })
       .def_static("invocation_order", &CodeGenData::invocation_order)
       .def_static("call_hierarchy", &CodeGenData::call_hierarchy)

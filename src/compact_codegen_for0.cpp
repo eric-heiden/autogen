@@ -22,9 +22,11 @@ std::string CompactCodeGen::forward_zero_source() {
         "larger than the provided input vector size.");
   }
 
+#ifdef DEBUG
   std::cout << "Generating code for function \"" << model_name_
             << "\" with input dimension " << input_dim()
             << " and output dimension " << output_dim() << "...\n";
+#endif
 
   std::vector<CGBase> indVars(input_dim());
   handler.makeVariables(indVars);
@@ -45,7 +47,7 @@ std::string CompactCodeGen::forward_zero_source() {
      */
     dep = model_source_gen_->prepareForward0WithLoops(handler, indVars);
   }
-  
+
   model_source_gen_->setZeroEvaluated(true);
   model_source_gen_->finishedJob();
 
@@ -72,8 +74,10 @@ std::string CompactCodeGen::forward_zero_source() {
     std::cerr << "Warning: generated code for forward-zero pass of \""
               << model_name_ << "\" has no temporary variables.\n";
   } else {
+#ifdef DEBUG
     std::cout << "Code generated for forward-zero pass of \"" << model_name_
               << "\" with " << temporary_dim << " temporary variables.\n";
+#endif
   }
   // for (const auto& var : nameGen.getTemporary()) {
   //   std::cout << "\t" << var.name << std::endl;

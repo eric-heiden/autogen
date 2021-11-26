@@ -123,7 +123,7 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
         __trace_data.clear()
         __tapes.clear()
 
-        print("Dry run...")
+        # print("Dry run...")
         # first, a "dry run" to discover the atomic functions
         CodeGenData.set_dry_run(True)
         retrieve_tape()
@@ -144,7 +144,7 @@ def trace(fun, xs, mode: Mode = Mode.CPPAD):
         # trace atomics in Python code
         __trace_python_atomics()
 
-        print("Final run...")
+        # print("Final run...")
     # trace top-level function where the CGAtomicFunBridges are used
     ad_x = Vector([Scalar(to_double(x)) for x in xs])
     independent(ad_x)

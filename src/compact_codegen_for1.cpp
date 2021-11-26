@@ -323,9 +323,11 @@ std::string CompactCodeGen::forward_one_source(
   const std::size_t local_input_dim = fun_->Domain() - global_input_dim_;
   const std::size_t out_dim = fun_->Range();
 
+#ifdef DEBUG
   std::cout << "Generating first-order forward code for function \""
             << model_name_ << "\" with input dimension " << local_input_dim
             << " and output dimension " << out_dim << "...\n";
+#endif
 
   //   std::vector<CGBase> indVars(local_input_dim + global_input_dim_);
   //   handler.makeVariables(indVars);

@@ -302,7 +302,6 @@ struct Generated {
         return;
       } else {
         compile(t);
-        std::cout << "Finished compilation.\n";
       }
     }
   }

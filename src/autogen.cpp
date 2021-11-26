@@ -9,6 +9,7 @@
 
 #include "cppadcg_system.cpp"
 #include "system.cpp"
+#include "cache.cpp"
 #include "compact_target.cpp"
 #include "compact_codegen.cpp"
 

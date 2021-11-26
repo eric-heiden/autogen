@@ -66,8 +66,10 @@ std::string CompactCodeGen::jacobian_source() {
     std::cerr << "Warning: generated code for Jacobian pass of \""
               << model_name_ << "\" has no temporary variables.\n";
   } else {
+#ifdef DEBUG
     std::cout << "Code generated for Jacobian pass of \"" << model_name_
               << "\" with " << temporary_dim << " temporary variables.\n";
+#endif
   }
 
   std::ostringstream complete;

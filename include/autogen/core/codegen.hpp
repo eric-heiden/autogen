@@ -79,6 +79,10 @@ class CodeGenData {
     return instance->traces_;
   }
 
+  static bool has_trace(const std::string &name) {
+    return traces().find(name) != traces().end();
+  }
+
   /**
    * Keeps track of the order of atomic function invocations, i.e. functions
    * that are called later are added later to this list.
@@ -155,7 +159,7 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
       hierarchy[parent].push_back(name);
     }
     order.push_back(name);
-    std::cout << " order size: " << order.size() << std::endl;
+    // std::cout << " order size: " << order.size() << std::endl;
 
     stack.push_back(name);
     FunctionTrace trace;
@@ -234,7 +238,17 @@ inline void trace_existing_atomics() {
   using ADFun = typename CppAD::ADFun<CGScalar>;
 
   const auto &order = CodeGenData::invocation_order();
+#ifdef DEBUG
+  std::cout << "invocation order: ";
+  for (const auto &s : order) {
+    std::cout << s << " ";
+  }
+  std::cout << std::endl;
+#endif
   for (auto it = order.rbegin(); it != order.rend(); ++it) {
+    if (!CodeGenData::has_trace(*it)) {
+      continue;
+    }
     // for (auto &[name, trace] : CodeGenData::traces()) {
     FunctionTrace &trace = CodeGenData::traces()[*it];
     if (trace.bridge) {
@@ -254,9 +268,6 @@ inline void trace_existing_atomics() {
       ax[i] = ADCGScalar(trace.trace_input[i]);
       // std::cout << "  " << ax[i];
     }
-    // std::cout << std::endl;
-    // std::cout << "\tFree all memory in CppAD.\n";
-    // CppAD::thread_alloc::free_all();
     CppAD::Independent(ax);
     trace.functor(ax, ay);
     trace.tape = new ADFun(ax, ay);
@@ -267,55 +278,58 @@ inline void trace_existing_atomics() {
     // std::cout << "\tTape \"" << trace.name << "\" has " <<
     // trace.tape->size_op()
     //           << " operator(s) in the operation sequence.\n";
+#ifdef DEBUG
+    {
+      std::cout << "\t\tTesting \"" << trace.name
+                << "\" tape code with
+          input : "; typedef CppAD::cg::CG<BaseScalar> CGScalar;
+                  std::vector<CGScalar>
+                      indVars(trace.input_dim);
+      // const auto& x = model_source_gen_->getTypicalIndependentValues();
+      // if (x.size() > 0) {
+      for (std::size_t i = 0; i < indVars.size(); i++) {
+        indVars[i].setValue(trace.trace_input[i]);
+        std::cout << "  " << indVars[i];
+      }
+      // }
+      std::cout << "\n";
+      std::vector<CGScalar> dep;
+      dep = trace.tape->Forward(0, indVars);
+      std::cout << "\t\tTesting \"" << trace.name << "\" tape code output:";
+      for (const auto &d : dep) {
+        std::cout << "  " << d;
+      }
+      std::cout << "\n";
+      std::cout << "\t\tActual \"" << trace.name << "\" tape output:";
+      for (const auto &d : trace.ay) {
+        std::cout << "  " << d;
+      }
+      std::cout << "\n\n";
+    }
 
-    // {
-    //   std::cout << "\t\tTesting \"" << trace.name << "\" tape code with
-    //   input:"; typedef CppAD::cg::CG<BaseScalar> CGScalar;
-    //   std::vector<CGScalar> indVars(trace.input_dim);
-    //   // const auto& x = model_source_gen_->getTypicalIndependentValues();
-    //   // if (x.size() > 0) {
-    //   for (std::size_t i = 0; i < indVars.size(); i++) {
-    //     indVars[i].setValue(trace.trace_input[i]);
-    //     std::cout << "  " << indVars[i];
-    //   }
-    //   // }
-    //   std::cout << "\n";
-    //   std::vector<CGScalar> dep;
-    //   dep = trace.tape->Forward(0, indVars);
-    //   std::cout << "\t\tTesting \"" << trace.name << "\" tape code output:";
-    //   for (const auto &d : dep) {
-    //     std::cout << "  " << d;
-    //   }
-    //   std::cout << "\n";
-    //   std::cout << "\t\tActual \"" << trace.name << "\" tape output:";
-    //   for (const auto &d : trace.ay) {
-    //     std::cout << "  " << d;
-    //   }
-    //   std::cout << "\n\n";
-    // }
-
-    // {
-    //   std::cout << "\tTesting \"" << trace.name
-    //             << "\" tape code with random input:";
-    //   srand(123);
-    //   typedef CppAD::cg::CG<BaseScalar> CGScalar;
-    //   std::vector<CGScalar> indVars(trace.input_dim);
-    //   // const auto& x = model_source_gen_->getTypicalIndependentValues();
-    //   // if (x.size() > 0) {
-    //   for (std::size_t i = 0; i < indVars.size(); i++) {
-    //     indVars[i].setValue(double(rand()) / RAND_MAX);
-    //     std::cout << "  " << indVars[i];
-    //   }
-    //   // }
-    //   std::cout << "\n";
-    //   std::vector<CGScalar> dep;
-    //   dep = trace.tape->Forward(0, indVars);
-    //   std::cout << "\t\tTesting \"" << trace.name << "\" tape code output:";
-    //   for (const auto &d : dep) {
-    //     std::cout << "  " << d;
-    //   }
-    //   std::cout << "\n";
-    // }
+    {
+      std::cout << "\tTesting \"" << trace.name
+                << "\" tape code with random input:";
+      srand(123);
+      typedef CppAD::cg::CG<BaseScalar> CGScalar;
+      std::vector<CGScalar> indVars(trace.input_dim);
+      // const auto& x = model_source_gen_->getTypicalIndependentValues();
+      // if (x.size() > 0) {
+      for (std::size_t i = 0; i < indVars.size(); i++) {
+        indVars[i].setValue(double(rand()) / RAND_MAX);
+        std::cout << "  " << indVars[i];
+      }
+      // }
+      std::cout << "\n";
+      std::vector<CGScalar> dep;
+      dep = trace.tape->Forward(0, indVars);
+      std::cout << "\t\tTesting \"" << trace.name << "\" tape code output:";
+      for (const auto &d : dep) {
+        std::cout << "  " << d;
+      }
+      std::cout << "\n";
+    }
+#endif
 
     trace.bridge = create_atomic_fun_bridge(trace.name, *(trace.tape), true);
   }

@@ -132,10 +132,12 @@ void retrieve_shared_ptr(T** target, const std::string& name) {
 
 template <>
 void retrieve_tape<ADCGScalar>() {
+#ifdef DEBUG
   std::cout << "before retrieving tape ADCG restored Atomic index infos ("
             << ADCGScalar::atomic_index_infos << ") has "
             << ADCGScalar::atomic_index_infos->size() << " entries.\n";
   std::cout << "Retrieving ADCGScalar tape table...\n";
+#endif
   ADCGScalar::tape_table = reinterpret_cast<CppAD::local::ADTape<CGScalar>**>(
       py::get_shared_data("tape_table_adcg"));
   ADCGScalar::tape_id_table =
@@ -146,11 +148,12 @@ void retrieve_tape<ADCGScalar>() {
   //     py::get_shared_data("traces"));
   retrieve_shared_ptr(&autogen::CodeGenData::instance, "codegen_data");
 
-
-  CppAD::thread_alloc::all_info = reinterpret_cast<CppAD::thread_alloc::thread_alloc_info**>(
-      py::get_shared_data("thread_alloc_all_info"));
-  CppAD::thread_alloc::zero_info = reinterpret_cast<CppAD::thread_alloc::thread_alloc_info*>(
-      py::get_shared_data("thread_alloc_zero_info"));
+  CppAD::thread_alloc::all_info =
+      reinterpret_cast<CppAD::thread_alloc::thread_alloc_info**>(
+          py::get_shared_data("thread_alloc_all_info"));
+  CppAD::thread_alloc::zero_info =
+      reinterpret_cast<CppAD::thread_alloc::thread_alloc_info*>(
+          py::get_shared_data("thread_alloc_zero_info"));
 
   // autogen::CodeGenData::is_dry_run =
   //     *reinterpret_cast<bool*>(py::get_shared_data("is_dry_run"));
@@ -165,6 +168,7 @@ void retrieve_tape<ADCGScalar>() {
   // retrieve_shared_ptr(&autogen::CodeGenData::invocation_order,
   //                     "invocation_order");
 
+#ifdef DEBUG
   std::cout << "after retrieved tape data:  ";
   print_invocation_order();
   std::cout << "ADCG restored Atomic index at "
@@ -172,6 +176,7 @@ void retrieve_tape<ADCGScalar>() {
             << ADCGScalar::atomic_index_infos->size() << " entries.\n";
   std::cout << "Retrieved codegen_data ptr: " << autogen::CodeGenData::instance
             << std::endl;
+#endif
 }
 
 void set_shared_data() {
@@ -335,13 +340,13 @@ void publish_class(py::module& m, const std::string& name) {
       m.def(name.c_str(), [&m, &name](py::args args, const py::kwargs& kwargs) {
         switch (get_scope()->mode) {
           case MODE_CPPAD: {
-            retrieve_tape<ADScalar>();
+            // retrieve_tape<ADScalar>();
             // std::cout << "returning CppAD\n";
             py::type type = py::type::of<Class<ADScalar>>();
             return type(*args, **kwargs);
           }
           case MODE_CODEGEN: {
-            retrieve_tape<ADCGScalar>();
+            // retrieve_tape<ADCGScalar>();
             // std::cout << "returning CodeGen\n";
             py::type type = py::type::of<Class<ADCGScalar>>();
             return type(*args, **kwargs);

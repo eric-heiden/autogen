@@ -333,9 +333,11 @@ std::string CompactCodeGen::reverse_one_source(
   const std::size_t local_input_dim = fun_->Domain() - global_input_dim_;
   const std::size_t out_dim = fun_->Range();
 
+#ifdef DEBUG
   std::cout << "Generating first-order reverse code for function \""
             << model_name_ << "\" with input dimension " << local_input_dim
             << " and output dimension " << out_dim << "...\n";
+#endif
 
   //   std::vector<CGBase> indVars(local_input_dim + global_input_dim_);
   //   handler.makeVariables(indVars);
@@ -372,7 +374,8 @@ std::string CompactCodeGen::reverse_one_source(
   const std::string sparsity_function = model_name_ + "_reverse_one_sparsity";
   model_source_gen_->_cache.str("");
   model_source_gen_->generateSparsity1DSource2(sparsity_function, elements);
-  code << "\n" << function_type_prefix(true) << model_source_gen_->_cache.str() << "\n";
+  code << "\n"
+       << function_type_prefix(true) << model_source_gen_->_cache.str() << "\n";
 
   code << directional_reverse_function_source(model_name_, elements,
                                               fun_->Domain());
