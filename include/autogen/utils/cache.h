@@ -7,8 +7,6 @@
 
 namespace autogen {
 struct Cache {
-  friend std::unique_ptr<Cache> Cache::instance();
-
   static void clear();
 
   static bool exists(
