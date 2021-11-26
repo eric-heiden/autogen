@@ -281,10 +281,9 @@ inline void trace_existing_atomics() {
 #ifdef DEBUG
     {
       std::cout << "\t\tTesting \"" << trace.name
-                << "\" tape code with
-          input : "; typedef CppAD::cg::CG<BaseScalar> CGScalar;
-                  std::vector<CGScalar>
-                      indVars(trace.input_dim);
+                << "\" tape code with input : ";
+      typedef CppAD::cg::CG<BaseScalar> CGScalar;
+      std::vector<CGScalar> indVars(trace.input_dim);
       // const auto& x = model_source_gen_->getTypicalIndependentValues();
       // if (x.size() > 0) {
       for (std::size_t i = 0; i < indVars.size(); i++) {
