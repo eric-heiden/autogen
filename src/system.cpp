@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <tchar.h>
 #include <windows.h>
-
 #endif
 
 #include "autogen/utils/filesystem.hpp"
@@ -86,12 +85,6 @@ void printError(TCHAR *msg) {
   _tprintf(TEXT("\n\t%s failed with error %d (%s)"), msg, eNum, sysMsg);
 }
 #endif
-
-std::string to_lower(const std::string &str) {
-  std::string result = str;
-  std::transform(result.begin(), result.end(), result.begin(), ::tolower);
-  return result;
-}
 
 void load_windows_build_variables() {
 #ifdef AUTOGEN_SYSTEM_WIN

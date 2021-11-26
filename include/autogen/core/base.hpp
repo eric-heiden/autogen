@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <vector>
+
 
 // operating system detection
 #ifndef AUTOGEN_SYSTEM_LINUX
@@ -27,8 +29,9 @@ using BaseScalar = double;
 
 /**
  * Method of how the output of a vectorized function is accumulated.
- * This setting typically only applies to the vectorized version of the Jacobian pass of a function.
- * 
+ * This setting typically only applies to the vectorized version of the Jacobian
+ * pass of a function.
+ *
  * ACCUMULATE_NONE: No accumulation.
  * ACCUMULATE_SUM: Sum of the output vectors.
  * ACCUMULATE_MEAN: Mean of the output vectors.
@@ -36,6 +39,12 @@ using BaseScalar = double;
 enum AccumulationMethod { ACCUMULATE_NONE, ACCUMULATE_SUM, ACCUMULATE_MEAN };
 
 enum GenerationMode { MODE_NUMERICAL, MODE_CPPAD, MODE_CODEGEN };
+
+inline std::string to_lower(const std::string &str) {
+  std::string result = str;
+  std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+  return result;
+}
 
 struct GeneratedBase {
  protected:

@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 
+#include "autogen/utils/cache.h"
 #include "autogen/utils/filesystem.hpp"
 #include "base.hpp"
 #include "generated_codegen.h"
@@ -19,17 +20,13 @@ class Target {
   // this GeneratedCodeGen instance is owned by Generated, not the Target
   GeneratedCodeGen *cg_{nullptr};
   TargetType type_;
-
-  std::string source_folder_prefix_{".autogen/"};
+  std::string name_;
 
   // mapping from file name to source code content
   std::vector<std::pair<std::string, std::string>> sources_;
 
   // file names of the source files which are compiled
   std::vector<std::string> source_filenames_;
-
-  std::string sources_folder_;
-  std::string temp_folder_;
 
   std::string library_name_;
 
@@ -57,15 +54,14 @@ class Target {
    */
   bool generate_jacobian_{true};
 
-  Target(GeneratedCodeGen *cg, TargetType type) : cg_(cg), type_(type) {
+  bool found_in_cache_{false};
+
+  Target(GeneratedCodeGen *cg, TargetType type)
+      : cg_(cg), type_(type), name_(cg->name()) {
     if (cg_ == nullptr) {
       throw std::runtime_error(
           "Target cannot be created from an empty pointer to GeneratedCodeGen");
     }
-    sources_folder_ =
-        source_folder_prefix_ + name() + "_" + std::to_string(type_) + "_src";
-    temp_folder_ =
-        source_folder_prefix_ + name() + "_" + std::to_string(type_) + "_tmp";
   }
 
   // some helper function to ease access to important info from GeneratedCodeGen
@@ -76,7 +72,7 @@ class Target {
   int input_dim() const { return cg_->input_dim(); }
   int output_dim() const { return cg_->output_dim(); }
 
-  const std::string &name() const { return cg_->name(); }
+  const std::string &name() const { return name_; }
 
   FunctionTrace &main_trace() { return cg_->main_trace(); }
 
@@ -114,27 +110,45 @@ class Target {
     return sources_;
   }
 
-  virtual std::string canonical_name() const {
-    return name() + "_" + std::to_string(type_);
-  }
-
   bool generate_code() {
     sources_.clear();
     source_filenames_.clear();
-    if (!source_folder_prefix_.empty()) {
-      namespace fs = std::filesystem;
-      // create the source folder if it does not exist
-      if (!fs::exists(source_folder_prefix_)) {
-        fs::create_directories(source_folder_prefix_);
-      }
+    if (!generate_code_()) {
+      return false;
     }
-    return generate_code_();
+    save_sources_();
+    return true;
   }
 
-  bool compile() {    
-    autogen::load_windows_build_variables();
-    if (!compile_()) {
-      return false;
+  /**
+   * Saves the generated source files to the folder defined by `src_dir()`.
+   */
+  virtual void save_sources_() {
+    namespace fs = std::filesystem;
+    if (sources_.empty()) {
+      throw std::runtime_error(
+          "No source files have been generated yet. Ensure "
+          "`Target::generate_code()` is called before saving the code.");
+    }
+    found_in_cache_ = Cache::exists(sources_, &name_);
+    if (found_in_cache_) {
+      std::cout << "Sources for " << name() << " with target "
+                << std::to_string(type_)
+                << " have already been compiled. Loading library from cache."
+                << std::endl;
+
+    } else {
+      Cache::save_sources(sources_, type_, name());
+    }
+  }
+
+  bool compile() {
+    library_name_ = Cache::get_library_file(this->type(), this->name());
+    if (!found_in_cache_) {
+      autogen::load_windows_build_variables();
+      if (!compile_()) {
+        return false;
+      }
     }
     load_library(library_name_);
     return true;
@@ -187,7 +201,8 @@ class Target {
       const std::vector<std::vector<BaseScalar>> &local_inputs,
       const std::vector<BaseScalar> &global_input) const {
     throw std::runtime_error(
-        "function \"create_cmake_project\" has not been implemented for target" +
+        "function \"create_cmake_project\" has not been implemented for "
+        "target" +
         std::to_string(type_) + ".");
   }
 
@@ -209,9 +224,9 @@ class Target {
       const std::vector<BaseScalar> &input,
       const std::vector<BaseScalar> &global_input = std::vector<BaseScalar>{}) {
     std::vector<std::vector<BaseScalar>> inputs{input};
-    std::ostringstream folder_name;
-    folder_name << name() << "_" << std::to_string(type_) << "_cmake";
-    return create_cmake_project(folder_name.str(), inputs, global_input);
+    std::string folder_name =
+        Cache::get_cmake_folder(this->type(), this->name());
+    return create_cmake_project(folder_name, inputs, global_input);
   }
 };
 }  // namespace autogen

@@ -232,6 +232,7 @@ void OpenMpTarget::set_compiler_msvc(
 bool OpenMpTarget::compile_() {
   using namespace CppAD;
   using namespace CppAD::cg;
+  namespace fs = std::filesystem;
 
   if (compiler_ == nullptr) {
 #if AUTOGEN_SYSTEM_WIN
@@ -240,8 +241,11 @@ bool OpenMpTarget::compile_() {
     set_compiler_clang();
 #endif
   }
-  compiler_->setSourcesFolder(sources_folder_);
-  compiler_->setTemporaryFolder(temp_folder_);
+  std::string sources_folder =
+      Cache::get_source_folder(this->type_, this->name());
+  std::string temp_folder = Cache::get_temp_folder(this->type_, this->name());
+  compiler_->setSourcesFolder(sources_folder);
+  compiler_->setTemporaryFolder(temp_folder);
   compiler_->setSaveToDiskFirst(true);
 
 // TODO check type of compiler here, not operating system
@@ -267,7 +271,8 @@ bool OpenMpTarget::compile_() {
   timer->startingJob("", JobTimer::DYNAMIC_MODEL_LIBRARY);
 
   std::map<std::string, std::string> source_files;
-  for (const auto &[filename, content] : sources_) {
+  for (const auto &[path, content] : sources_) {
+    std::string filename = fs::path(path).filename().string();
     if (std::find(source_filenames_.begin(), source_filenames_.end(),
                   filename) != source_filenames_.end()) {
       source_files[filename] = content;
@@ -292,7 +297,6 @@ bool OpenMpTarget::compile_() {
     //     this->modelLibraryHelper_->getCustomSources();
     // compiler_->compileSources(customSource, true, this->modelLibraryHelper_);
 
-    library_name_ = source_folder_prefix_ + this->canonical_name();
     std::string libname = library_name_;
     libname += system::SystemInfo<>::DYNAMIC_LIB_EXTENSION;
 

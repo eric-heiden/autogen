@@ -26,14 +26,6 @@
 #endif
 
 namespace autogen {
-struct ResourcePath {
-  char* m_path;
-  ResourcePath(int len) {
-    m_path = (char*)malloc(len);
-    memset(m_path, 0, len);
-  }
-  virtual ~ResourcePath() { free(m_path); }
-};
 
 struct FileUtils {
   static inline std::string root{""};
@@ -163,7 +155,7 @@ struct FileUtils {
 
   static std::string abs_path(const std::string& relative_path) {
     namespace fs = std::filesystem;
-    return fs::canonical(fs::path(relative_path)).u8string();
+    return fs::absolute(fs::path(relative_path)).u8string();
   }
 };
 }  // namespace autogen

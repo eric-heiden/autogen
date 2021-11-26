@@ -201,8 +201,22 @@ bool LegacyCTarget::generate_code_() {
   }
   libcgen_->setVerbose(true);
 
-  SaveFilesModelLibraryProcessor<BaseScalar> psave(*libcgen_);
-  psave.saveSourcesTo(sources_folder_);
+  // SaveFilesModelLibraryProcessor<BaseScalar> psave(*libcgen_);
+  // psave.saveSourcesTo(sources_folder_);
+  sources_.clear();
+  for (const auto &entry : libcgen_->getLibrarySources()) {
+    sources_.push_back(entry);
+  }
+  for (auto *model : models_) {
+    model->generateSources(CppAD::cg::MultiThreadingType::NONE);
+    const std::map<std::string, std::string> &modelSources =
+        model->getSources();
+
+    for (const auto &entry : modelSources) {
+      sources_.push_back(entry);
+    }
+  }
+
   return true;
 }
 
@@ -224,8 +238,11 @@ bool LegacyCTarget::compile_() {
     set_compiler_clang();
 #endif
   }
-  compiler_->setSourcesFolder(sources_folder_);
-  compiler_->setTemporaryFolder(temp_folder_);
+  std::string sources_folder =
+      Cache::get_source_folder(this->type_, this->name());
+  std::string temp_folder = Cache::get_temp_folder(this->type_, this->name());
+  compiler_->setSourcesFolder(sources_folder);
+  compiler_->setTemporaryFolder(temp_folder);
   compiler_->setSaveToDiskFirst(true);
 
 // TODO check type of compiler here, not operating system
@@ -276,8 +293,7 @@ bool LegacyCTarget::compile_() {
     //     this->getLibrarySources();
     compiler_->compileSources(source_files, true, timer);
 
-    library_name_ = std::filesystem::absolute(source_folder_prefix_).string() +
-                    this->canonical_name();
+    library_name_ = Cache::get_library_file(this->type(), this->name());
     std::string libname = library_name_ + library_ext_;
 
     compiler_->buildDynamic(libname, timer);

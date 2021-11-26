@@ -20,7 +20,8 @@ bool CompactTarget<CodeGenT, LibFunctionT>::generate_code_() {
   for (auto it = order.rbegin(); it != order.rend(); ++it) {
     FunctionTrace &trace = CodeGenData::traces()[*it];
 
-    // std::cout << "Generating code for atomic function \"" << *it << "\" with "
+    // std::cout << "Generating code for atomic function \"" << *it << "\" with
+    // "
     //           << trace.tape->size_op()
     //           << " operator(s) in the operation sequence.\n";
     bool is_function_only = true;
@@ -102,12 +103,10 @@ bool CompactTarget<CodeGenT, LibFunctionT>::generate_code_() {
   for (const auto &src : source_filenames_) {
     main_file << "#include \"" << src << "\"\n";
   }
-  library_name_ = this->canonical_name();
+  std::string project_name = Cache::get_project_name(this->type(), this->name());
   sources_.push_back(
-      std::make_pair(library_name_ + source_ext, main_file.str()));
+      std::make_pair(project_name + source_ext, main_file.str()));
 
-  save_sources_();
-  library_name_ = source_folder_prefix_ + library_name_;
   return true;
 }
 
@@ -187,14 +186,16 @@ bool CompactTarget<CodeGenT, LibFunctionT>::create_cmake_project(
   std::string source_ext = codegen_->source_file_extension();
 
   std::ostringstream main_code;
-  main_code << "#include \"" << this->canonical_name() << source_ext << "\"\n";
+  std::string project_name =
+      Cache::get_project_name(this->type(), this->name());
+  main_code << "#include \"" << project_name << source_ext << "\"\n";
   main_code << "#include <cmath>\n\n";
   main_code << "using namespace std;\n\n";
   main_code << "int main(int argc, char **argv) {\n";
   main_code << "  const int num_threads = " << local_inputs.size() << ";\n";
   main_code << "  // initialize local inputs\n";
-  main_code << "  Float local_inputs["
-            << local_inputs[0].size() << " * num_threads] = {\n    ";
+  main_code << "  Float local_inputs[" << local_inputs[0].size()
+            << " * num_threads] = {\n    ";
   for (std::size_t i = 0; i < local_inputs.size(); ++i) {
     for (std::size_t j = 0; j < local_inputs[i].size(); ++j) {
       main_code << local_inputs[i][j];

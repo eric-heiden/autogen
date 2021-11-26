@@ -197,8 +197,13 @@ struct CudaTarget : public CompactTarget<CudaCodeGen, CudaLibFunction> {
         << "-o " << library_name_ << ".so "
 #endif
         << "--shared ";
-    std::filesystem::path folder(sources_folder_);
-    cmd << (folder / (this->canonical_name() + ".cu")).string();
+    std::string sources_folder =
+        Cache::get_source_folder(this->type(), this->name());
+    std::filesystem::path folder(sources_folder);
+
+    std::string project_name =
+        Cache::get_project_name(this->type(), this->name());
+    cmd << (folder / (project_name + ".cu")).string();
     autogen::Stopwatch timer;
     std::cout << "\n\n" << cmd.str() << "\n\n";
     timer.start();

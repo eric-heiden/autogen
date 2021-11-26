@@ -35,8 +35,6 @@ struct LegacyCTarget : public Target {
   using Target::cg_;
   using Target::library_name_;
   using Target::sources_;
-  using Target::sources_folder_;
-  using Target::temp_folder_;
 
 #if AUTOGEN_SYSTEM_WIN
   std::string library_ext_{".dll"};
@@ -58,6 +56,8 @@ struct LegacyCTarget : public Target {
       delete model;
     }
   }
+
+  virtual bool is_compiled() const { return cpu_library_ != nullptr; }
 
   void forward(const std::vector<BaseScalar> &input,
                std::vector<BaseScalar> &output) override;

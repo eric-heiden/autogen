@@ -21,7 +21,6 @@ struct CompactTarget : public Target {
   using Target::cg_;
   using Target::debug_mode_;
   using Target::sources_;
-  using Target::sources_folder_;
   using Target::type_;
 
   std::unique_ptr<CodeGen> codegen_{nullptr};
@@ -42,26 +41,6 @@ struct CompactTarget : public Target {
   }
 
   virtual bool generate_code_();
-
-  /**
-   * Saves the generated source files to the folder defined by `src_dir()`.
-   */
-  void save_sources_() const {
-    namespace fs = std::filesystem;
-    if (sources_.empty()) {
-      throw std::runtime_error(
-          "No source files have been generated yet. Ensure "
-          "`Target::generate_code()` is called before saving the code.");
-    }
-    fs::create_directories(sources_folder_);
-    std::cout << "Saving source files at "
-              << FileUtils::abs_path(sources_folder_) << "\n";
-    for (const auto &entry : sources_) {
-      std::ofstream file(fs::path(sources_folder_) / entry.first);
-      file << entry.second;
-      file.close();
-    }
-  }
 
   virtual std::string util_header_src_() const;
   virtual std::string model_info_src_() const;
