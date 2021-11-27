@@ -13,6 +13,9 @@
 #include "compact_target.cpp"
 #include "compact_codegen.cpp"
 
+#include "autogen/core/codegen.hpp"
+autogen::CodeGenData* autogen::CodeGenData::instance = nullptr;
+
 #include "nvcc_compiler.cpp"
 
 #include "cuda_target.cpp"

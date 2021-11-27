@@ -59,15 +59,11 @@ class CodeGenData {
   CodeGenData() = default;
 
  public:
-  ~CodeGenData() = default;
+  ~CodeGenData() { std::cout << "Destroyed CodeGenData " << this << std::endl; }
 
-  static inline CodeGenData *instance = nullptr;
+  static CodeGenData *instance;
 
-  static void create() {
-    if (instance == nullptr) {
-      instance = new CodeGenData();
-    }
-  }
+  static void create() { instance = new CodeGenData(); }
 
   /**
    * Maps each function that is executed to its trace.
@@ -126,8 +122,15 @@ class CodeGenData {
   }
 
   static void clear() {
-    delete instance;
-    instance = nullptr;
+    // delete instance;
+    // instance = nullptr;
+    if (instance) {
+      std::cout << "Clearing CodeGenData " << instance << std::endl;
+      instance->traces_.clear();
+      instance->invocation_order_.clear();
+      instance->invocation_stack_.clear();
+      instance->call_hierarchy_.clear();
+    }
   }
 };
 
@@ -152,6 +155,10 @@ inline void call_atomic(const std::string &name, ADFunctor<BaseScalar> functor,
       // the current function is called by another function, hence update the
       // call hierarchy
       const std::string &parent = stack.back();
+#if DEBUG
+      std::cout << "Atomic function \"" << name
+                << "\". is called from function \"" << parent << "\"\n";
+#endif
       auto &hierarchy = CodeGenData::call_hierarchy();
       if (hierarchy.find(parent) == hierarchy.end()) {
         hierarchy[parent] = std::vector<std::string>();
