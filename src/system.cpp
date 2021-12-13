@@ -123,10 +123,11 @@ void load_windows_build_variables() {
       // only load these specific build variables that are necessary for MSVC,
       // otherwise some PowerShell errors appear
       if (to_lower(var_name) == "include" || to_lower(var_name) == "lib" ||
-          to_lower(var_name) == "libpath") {
+          to_lower(var_name) == "libpath" || to_lower(var_name) == "path" ||
+          starts_with(to_lower(var_name), "windows")) {
         std::string var_value = line.substr(line.find("=") + 1);
-        // std::cout << "setting " << var_name << " = " << var_value <<
-        // std::endl;
+        trim(var_value);
+        // std::cout << "setting " << var_name << " = " << var_value << std::endl;
         SetEnvironmentVariable(var_name.c_str(), var_value.c_str());
         ++counter;
       }

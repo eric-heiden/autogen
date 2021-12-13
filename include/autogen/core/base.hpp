@@ -1,9 +1,10 @@
 #pragma once
 
 #include <algorithm>
+#include <cctype>
 #include <memory>
+#include <string>
 #include <vector>
-
 
 // operating system detection
 #ifndef AUTOGEN_SYSTEM_LINUX
@@ -42,8 +43,32 @@ enum GenerationMode { MODE_NUMERICAL, MODE_CPPAD, MODE_CODEGEN };
 
 inline std::string to_lower(const std::string &str) {
   std::string result = str;
-  std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+  std::transform(result.begin(), result.end(), result.begin(), std::tolower);
   return result;
+}
+
+inline bool starts_with(const std::string &str, const std::string &query) {
+  return str.rfind(query, 0) == 0;
+}
+
+static inline void ltrim(std::string &s) {
+  s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+            return !std::isspace(ch);
+          }));
+}
+
+// trim from end (in place)
+static inline void rtrim(std::string &s) {
+  s.erase(std::find_if(s.rbegin(), s.rend(),
+                       [](unsigned char ch) { return !std::isspace(ch); })
+              .base(),
+          s.end());
+}
+
+// trim from both ends (in place)
+static inline void trim(std::string &s) {
+  ltrim(s);
+  rtrim(s);
 }
 
 struct GeneratedBase {
