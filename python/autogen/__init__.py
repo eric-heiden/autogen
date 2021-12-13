@@ -24,7 +24,7 @@ def scalar(x):
     Converts x to the scalar type for the current mode.
     """
     if get_mode() == Mode.DOUBLE:
-        return float(x)
+        return float(to_double(x))
     if get_mode() == Mode.CPPAD:
         return ADScalar(x)
     return ADCGScalar(x)
