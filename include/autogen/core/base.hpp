@@ -43,7 +43,8 @@ enum GenerationMode { MODE_NUMERICAL, MODE_CPPAD, MODE_CODEGEN };
 
 inline std::string to_lower(const std::string &str) {
   std::string result = str;
-  std::transform(result.begin(), result.end(), result.begin(), std::tolower);
+  std::transform(result.begin(), result.end(), result.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
   return result;
 }
 
