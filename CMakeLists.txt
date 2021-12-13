@@ -51,6 +51,10 @@ UPDATE_COMMAND ""
 add_dependencies(CppADCodeGen-Project CppAD)
 add_library(CppADCodeGen INTERFACE IMPORTED)
 add_dependencies(CppADCodeGen CppAD-Project CppADCodeGen-Project)
+if (Eigen3_FOUND)
+  target_link_libraries(CppAD INTERFACE Eigen3::Eigen)
+  target_link_libraries(CppADCodeGen INTERFACE Eigen3::Eigen)
+endif (Eigen3_FOUND)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/CppAD/include)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/CppADCodeGen/include)
 target_include_directories(CppADCodeGen
