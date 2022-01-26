@@ -65,6 +65,10 @@ py::class_<Scalar, std::shared_ptr<Scalar>> expose_scalar(py::handle m,
       .def("acos", &Scalar::acos_me)
       .def("asin", &Scalar::asin_me)
       .def("atan", &Scalar::atan_me)
+      .def("atan2",
+           [](const Scalar& y, const Scalar& x) { return CppAD::atan2(y, x); })
+      .def("arctan2",
+           [](const Scalar& y, const Scalar& x) { return CppAD::atan2(y, x); })           
       .def("cos", &Scalar::cos_me)
       .def("cosh", &Scalar::cosh_me)
       .def("exp", &Scalar::exp_me)
