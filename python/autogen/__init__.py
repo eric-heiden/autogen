@@ -1,7 +1,7 @@
 from typing import Callable
 from collections import namedtuple
 import os
-import platform
+import numpy as np
 from _autogen import *
 
 init_shared_data()
@@ -166,12 +166,12 @@ def init_vsvars():
         raise EnvironmentError("vswhere.exe not found at: %s", vswhere_path)
 
     vs_path = (
-        os.popen('"{}" -latest -property installationPath'.format(vswhere_path))
+        os.popen(f'"{vswhere_path}" -latest -property installationPath')
         .read()
         .rstrip()
     )
     vsvars_path = os.path.join(vs_path, "VC\\Auxiliary\\Build\\vcvars64.bat")
-    output = os.popen('"{}" && set'.format(vsvars_path)).read()
+    output = os.popen(f'"{vsvars_path}" && set').read()
     assignments = output.splitlines()
     for line in assignments:
         pair = line.split("=", 1)
@@ -188,32 +188,73 @@ def init_vsvars():
 
 class Generated:
     def __init__(
-        self, function: Callable[[list], list], name: str, mode: Mode = Mode.CPPAD
+        self,
+        function: Callable[[list], list],
+        name: str = None,
+        mode: Mode = Mode.CODEGEN,
+        codegen_target = Target.OPENMP,
     ):
         self.function = function
-        self.name = name
-        self.mode = mode
+        if name is None:
+            name = function.__name__
+        self.name = name.lower().replace(" ", "_")
+        self.__mode = mode
+        self.__codegen_target = codegen_target
+        self.__gen = None
+        self.debug_mode = False
         self.__global_input_dim = 0
         self.__local_input_dim = -1
         self.__output_dim = -1
-        self.__is_compiled = False
+
+    def init(self, trace_input):
+        f = trace(self.function, trace_input, self.__mode)
+        if self.__mode == Mode.CODEGEN:
+            self.__gen = GeneratedCodeGen(self.name, f)
+            self.__gen.set_target(self.__codegen_target)
+            self.__gen.debug_mode = self.debug_mode
+            self.__gen.generate_code()
+            self.__gen.compile()
+        elif self.__mode == Mode.CPPAD:
+            self.__gen = GeneratedCppAD(f)
+        else:
+            raise NotImplementedError(f"Mode {self.__mode} not supported")
+        self.__global_input_dim = self.__gen.global_input_dim
+        self.__local_input_dim = self.__gen.local_input_dim
+        self.__output_dim = self.__gen.output_dim
 
     def __call__(self, x: list) -> list:
-        return self.function(x)
+        if self.__gen is None:
+            self.init(x)
+        return self.__gen(x)
 
     def jacobian(self, x: list) -> list:
-        pass
+        if self.__gen is None:
+            self.init(x)
+        return self.__gen.jacobian(x)
 
     @property
     def mode(self):
-        return self.mode
+        return self.__mode
 
     @mode.setter
     def mode(self, m):
-        if m == self.mode:
+        if m == self.__mode:
             return
         print("Setting mode to", m)
-        self.mode = m
+        self.__mode = m
+        self.__gen = None
+
+    @property
+    def codegen_target(self):
+        return self.__codegen_target
+
+    @codegen_target.setter
+    def codegen_target(self, m):
+        if m == self.__codegen_target:
+            return
+        print("Setting codegen target to", m)
+        self.__codegen_target = m
+        self.__gen = None
 
     @property
     def input_dim(self):
@@ -223,12 +264,63 @@ class Generated:
     def output_dim(self):
         return self.__output_dim
 
-    def discard_library(self):
-        pass
-
     @property
     def is_compiled(self):
         return self.__is_compiled
+
+    def get_torch_functor(self, check_nan=False):
+        if self.__gen is None:
+            raise RuntimeError("Generated function not initialized")
+        import torch
+        gen = self.__gen
+        name = self.name
+        input_dim = self.input_dim
+        output_dim = self.output_dim
+
+        class TorchFunctor(torch.autograd.Function):
+            @staticmethod
+            def forward(ctx, input):
+                ctx.batched = input.ndim == 2
+                ctx.input = input.detach().cpu().numpy()
+                if ctx.batched:
+                    output = gen(ctx.input, [])
+                else:
+                    output = gen(ctx.input)
+                if check_nan and np.any(np.isnan(output)):
+                    gen.create_cmake_project(f"{name}_cmake", ctx.input)
+                    raise RuntimeError(
+                        f"Output from forward pass of function {name} contains NaN values"
+                    )
+                return torch.tensor(output, dtype=input.dtype, device=input.device)
+
+            @staticmethod
+            def backward(ctx, grad_output):
+                # Here we must handle None grad_output tensor. In this case we
+                # can skip unnecessary computations and just return None.
+                if grad_output is None:
+                    return None, None
+
+                if ctx.batched:
+                    jac = gen.jacobian(ctx.input, [])
+                else:
+                    jac = gen.jacobian(ctx.input)
+                jac = np.asarray(jac).reshape(
+                    (input_dim, output_dim), order="F")
+                if check_nan and np.any(np.isnan(jac)):
+                    gen.create_cmake_project(f"{name}_cmake", ctx.input)
+                    raise RuntimeError("Dynamics Jacobian contains NaN values")
+                jac = torch.tensor(
+                    jac, dtype=grad_output.dtype, device=grad_output.device
+                )
+                if ctx.batched:
+                    grad = torch.matmul(jac, grad_output.unsqueeze(1))
+                else:
+                    grad = torch.matmul(jac, grad_output)
+
+                return grad, None
+
+        torch_functor = TorchFunctor.apply
+        return torch_functor
 
 
 # def trace(fun, xs) -> ADFun:
